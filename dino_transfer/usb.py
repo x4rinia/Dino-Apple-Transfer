@@ -750,7 +750,7 @@ def restart_apple_services() -> dict:
 
     # Starte Apple Devices wieder an
     try:
-        os.startfile("appledevices:")
+        launch_apple_devices_app()
     except Exception:
         pass
 
