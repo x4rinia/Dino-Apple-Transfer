@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#121212">
+  <title>Dino-Apple-Transfer 🦕 – iPhone &amp; iPad</title>
+  <link rel="icon" href="/static/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/static/ipad.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="header">
+      <div class="brand">
+        <img class="brand-dino" src="/static/dino_hero.png" alt="Dino Sauropod">
+        <div>
+          <h1>Dino-Apple-Transfer <span class="dino-emoji">🦕</span></h1>
+          <p class="sub">Direktverbindung mit <span id="pcName">deinem PC</span></p>
+        </div>
+      </div>
+      <div class="status-pill">
+        <span class="dot live"></span> Verbunden
+      </div>
+    </header>
+
+    <!-- Upload Bereich (Vom iPhone/iPad zum PC) -->
+    <section class="card upload-card">
+      <div class="card-head">
+        <h2>⬆️ Datei zum PC senden</h2>
+        <span class="badge">Vom Gerät</span>
+      </div>
+      <p class="hint">Wähle Videos, Musik, Fotos oder Dokumente aus der <b>Dateien-App</b> oder deiner <b>Fotomediathek</b>.</p>
+      
+      <label class="drop-zone" id="uploadDropZone">
+        <input type="file" id="fileInput" multiple style="display:none">
+        <div class="drop-icon">📦</div>
+        <div class="drop-title">Dateien auswählen</div>
+        <div class="drop-sub">Tippen, um Dateien oder Fotos zum PC zu senden</div>
+      </label>
+
+      <div class="progress-wrap" id="progressWrap" hidden>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-text" id="progressText">Wird hochgeladen …</div>
+      </div>
+    </section>
+
+    <!-- Download Bereich (Vom PC zum iPhone/iPad) -->
+    <section class="card download-card">
+      <div class="card-head">
+        <h2>⬇️ Dateien vom PC laden</h2>
+        <div class="card-head-actions">
+          <button class="btn-action" id="btnIpadMkdir">📁 Neuer Ordner</button>
+          <button class="btn-refresh" id="btnRefresh" title="Neu laden">↻</button>
+        </div>
+      </div>
+      <p class="hint">Tippe auf eine Datei zum Speichern oder verwalte Ordner direkt hier.</p>
+      
+      <div class="file-list" id="fileList">
+        <div class="loading">🦕 Durchsuche PC-Dateien …</div>
+      </div>
+    </section>
+
+    <!-- Tipps für iPhone & iPad -->
+    <section class="card tips-card">
+      <h3>💡 Tipps für iPhone &amp; iPad</h3>
+      <ul class="tips-list">
+        <li><b>Musik &amp; Videos:</b> Lade dir die kostenlose App <b>VLC</b> aus dem App Store. Nach dem Download in der <i>Dateien-App</i> auf Teilen › <b>VLC</b> tippen – sofort abspielbar!</li>
+        <li><b>PDFs &amp; Bücher:</b> Direkt im Browser öffnen oder über das Teilen-Symbol in <b>Bücher</b> sichern.</li>
+        <li><b>Beliebiger Zielordner:</b> In der <i>Dateien-App</i> lange auf die geladene Datei drücken › <b>Verschieben</b> › in jeden gewünschten Ordner legen.</li>
+      </ul>
+    </section>
+
+    <footer class="footer">
+      <p>Dino-Apple-Transfer 🦕 iPhone &amp; iPad · Lokales Netzwerk / USB · 100% Privat</p>
+    </footer>
+  </div>
+
+  <script src="/static/ipad.js"></script>
+</body>
+</html>

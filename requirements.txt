@@ -1,0 +1,6 @@
+pywebview>=6.2.1
+pymobiledevice3>=11.49.5
+ifaddr>=0.2.0
+pillow>=11.0.0
+pyinstaller>=6.22.0
+

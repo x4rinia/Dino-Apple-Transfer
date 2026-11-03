@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dino-Apple-Transfer 🦕 – USB-Kabel für iPhone &amp; iPad</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <!-- ============ Kopfzeile ============ -->
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand__sauro" src="dino_hero.png" alt="Dino Sauropod">
+        <div>
+          <h1>DINO-APPLE-TRANSFER <span class="dino-tag">USB-Kabel</span></h1>
+          <p class="brand__sub">Direkte, lokale Dateiübertragung für iPhone &amp; iPad per USB</p>
+        </div>
+      </div>
+      <div class="pills">
+        <button class="pill" id="pillUsb" data-goto="usb" title="USB-Status"><span class="dot"></span><span class="pill__text">USB: prüfe …</span></button>
+        <button class="pill pill--tips" id="btnTipsPill" data-goto="help" title="Tipps &amp; App-Empfehlungen"><span class="pill__icon">💡</span> App-Tipps</button>
+      </div>
+    </header>
+
+    <!-- Saubere Navigation mit genau 2 Tabs -->
+    <nav class="tabs" role="tablist">
+      <button class="tab is-active" role="tab" data-view="usb" id="tabUsb">🔌 Auf meinem iPad (USB)</button>
+      <button class="tab" role="tab" data-view="help" id="tabHelp">🦕 Tipps &amp; App-Empfehlungen</button>
+    </nav>
+
+    <!-- ============ USB HAUPTANSICHT ============ -->
+    <main class="view is-active" id="view-usb">
+      <!-- Zustand: Suche / Nicht verbunden / Vertrauen … -->
+      <section class="state card" id="usbState">
+        <img class="state__sauro" src="dino_hero.png" alt="Dino Sauropod">
+        <h2 id="usbStateTitle">iPhone oder iPad per USB-Kabel verbinden</h2>
+        <p id="usbStateText" class="muted">Dino wartet am USB-Anschluss. Sobald das Gerät verbunden ist, erscheint es automatisch.</p>
+        
+        <!-- Wichtiger Kabelhinweis -->
+        <div class="cable-alert">
+          <div class="cable-alert__icon">⚠️</div>
+          <div class="cable-alert__body">
+            <b>Wichtig: Echtes USB-Datenkabel verwenden!</b>
+            <p>Viele günstige Kabel sind <b>reine Ladekabel</b> (übertragen nur Strom, aber keine Daten). Verwende das Original-Apple-Kabel oder ein zertifiziertes Datenkabel.</p>
+          </div>
+        </div>
+
+        <div id="usbStateActions" class="state__actions"></div>
+        <ol class="state__steps" id="usbStateSteps"></ol>
+      </section>
+
+      <!-- Zustand: verbunden -->
+      <section class="usb-layout" id="usbReady" hidden>
+        <!-- Seitenleiste mit Apps & Speicher -->
+        <aside class="sidebar" id="sidebar">
+          <div class="card device">
+            <div class="device__head">
+              <div class="device__icon" id="devIcon">📱</div>
+              <div>
+                <div class="device__name" id="devName">Apple-Gerät</div>
+                <div class="device__meta muted" id="devMeta"></div>
+              </div>
+            </div>
+            <div class="storage" id="devStorage" hidden>
+              <div class="storage__bar"><span id="devStorageFill"></span></div>
+              <div class="storage__text muted" id="devStorageText"></div>
+            </div>
+          </div>
+
+          <div class="card apps">
+            <div class="card__head">
+              <h3 id="sidebarHeading">Auf meinem iPad</h3>
+              <div class="head-actions">
+                <button class="icon-btn" id="appsReload" title="Apps neu laden">↻</button>
+                <button class="icon-btn" id="btnCollapseSidebar" title="Seitenleiste ausblenden">◀</button>
+              </div>
+            </div>
+            <!-- Dino-Transfer Hauptordner Card -->
+            <button class="dino-folder-btn is-active" id="btnDinoFolder" title="Dino-Transfer Hauptordner auf dem iPad">
+              <img class="dino-folder-btn__icon" src="dino_hero.png" alt="Dino">
+              <div class="dino-folder-btn__body">
+                <div class="dino-folder-btn__title">🦕 Dino-Transfer</div>
+                <div class="dino-folder-btn__sub">Dein Ordner für alle Dateien</div>
+              </div>
+            </button>
+
+            <!-- Deutlicher Hinweis wo man den Ordner auf dem Tablet findet -->
+            <div class="dino-tablet-hint">
+              <div class="dino-tablet-hint__icon">📍</div>
+              <div class="dino-tablet-hint__body">
+                <b>Auf deinem iPad finden:</b>
+                <p>Öffne die <b>Dateien-App</b> ➔ <b>Auf meinem iPad</b> ➔ <b>Chrome</b> ➔ <b>Dino-Transfer</b>. Dort liegen all deine übertragenen Ordner &amp; Dateien!</p>
+              </div>
+            </div>
+
+            <!-- Optionale andere App-Ordner (standardmäßig ausgeblendet) -->
+            <div class="other-apps-toggle-wrap">
+              <button class="btn btn--ghost" id="btnToggleOtherApps">▼ Andere App-Ordner anzeigen (optional)</button>
+            </div>
+
+            <div id="otherAppsSection" hidden style="margin-top:8px">
+              <input class="input" id="appSearch" type="search" placeholder="App suchen (z. B. Kindle, Sketchbook) …">
+              <ul class="app-list" id="appList" style="max-height:140px;margin-top:6px"></ul>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Datei-Browser (Auf meinem iPad / Unterordner) -->
+        <section class="card browser" id="browser">
+          <div class="browser__top">
+            <div class="crumbs" id="crumbs"></div>
+            <div class="where muted small" id="whereHint"></div>
+          </div>
+
+          <div class="toolbar">
+            <button class="btn btn--small btn--toggle-sidebar" id="btnExpandSidebar" title="Seitenleiste mit App-Ordnern einblenden" hidden>▶ Apps einblenden</button>
+            <button class="btn btn--primary" id="btnUsbAdd" title="Dateien vom PC auf das Gerät kopieren">⬆ Dateien zum iPad</button>
+            <button class="btn" id="btnUsbAddFolder" title="Einen ganzen Ordner vom PC auf das Gerät kopieren">📁 Ordner vom PC übertragen</button>
+            <button class="btn btn--action" id="btnUsbMkdir" title="Einen neuen Ordner auf dem iPad erstellen">＋📁 Neuer Ordner auf iPad</button>
+            <span class="toolbar__sep"></span>
+            <button class="btn" id="btnUsbPull" disabled title="Ausgewählte Dateien/Ordner auf den PC kopieren">⬇ Auf PC kopieren</button>
+            <button class="btn" id="btnUsbPullTo" disabled title="Zielordner auf dem PC frei auswählen">⬇ Speichern unter …</button>
+            <button class="btn btn--danger" id="btnUsbDelete" disabled title="Ausgewählte Dateien/Ordner auf dem iPad löschen">🗑 Ausgewählte löschen</button>
+            <span class="toolbar__grow"></span>
+            <button class="btn btn--small" id="btnAppTipsQuick" title="Empfehlungen für Musik- und Videoplayer auf dem iPad">💡 App-Tipps</button>
+            <button class="icon-btn" id="btnUsbRefresh" title="Aktualisieren">↻</button>
+          </div>
+
+          <div class="filelist-wrap">
+            <table class="filelist" id="usbTable">
+              <thead>
+                <tr>
+                  <th class="col-check"><input type="checkbox" id="usbCheckAll" title="Alle auswählen"></th>
+                  <th>Name</th>
+                  <th class="col-size">Größe</th>
+                  <th class="col-date">Geändert</th>
+                  <th class="col-act">Aktionen</th>
+                </tr>
+              </thead>
+              <tbody id="usbRows"></tbody>
+            </table>
+            
+            <div class="empty" id="usbEmpty" hidden>
+              <img class="empty__sauro" src="dino_hero.png" alt="Dino">
+              <p><b>Dieser Ordner ist noch leer.</b><br>Zieh Musik, Videos, Bücher oder PDFs einfach in dieses Fenster 🦕</p>
+            </div>
+            
+            <div class="loading" id="usbLoading" hidden>
+              <img class="loading__sauro" src="dino_hero.png" alt="Dino"> Lade Dateien …
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <!-- ============ HILFE & APP-EMPFEHLUNGEN ============ -->
+    <main class="view" id="view-help">
+      <div class="help-grid">
+        <!-- App Empfehlung 1: VLC -->
+        <section class="card help-card">
+          <div class="card__head">
+            <h3>🎵 Musik &amp; 🎬 Videos abspielen</h3>
+            <span class="dino-tag">Top Empfehlung</span>
+          </div>
+          <p>Apple unterstützt standardmäßig viele Medienformate (wie MKV, AVI, FLAC) nicht in der Dateien-App.</p>
+          <div class="app-recommend">
+            <div class="app-recommend__head">
+              <span class="app-recommend__icon">🟧</span>
+              <div>
+                <b>VLC for Mobile</b>
+                <div class="muted small">100% kostenlos, quelloffen, werbefrei</div>
+              </div>
+            </div>
+            <p class="small"><b>Unterstützt:</b> MP3, FLAC, WAV, AAC, M4A, ALAC, MKV, MP4, AVI, MOV, TS und Untertitel.</p>
+            <p class="small"><b>So geht's:</b> Nach der Installation aus dem App Store erscheint in Dino sofort der Ordner <b>„VLC“</b> unter <i>Auf meinem iPad</i>. Dateien mit Dino hineinkopieren – in der VLC-App auf dem iPad sind sie sofort offline abspielbar!</p>
+            <button class="btn btn--small" data-open="https://apps.apple.com/app/vlc-for-mobile/id650377962">Im Apple App Store ansehen ↗</button>
+          </div>
+        </section>
+
+        <!-- App Empfehlung 2: Documents -->
+        <section class="card help-card">
+          <div class="card__head">
+            <h3>📄 Dokumente, Archive &amp; PDFs</h3>
+            <span class="dino-tag">Allrounder</span>
+          </div>
+          <p>Für universelle Dateiverwaltung, ZIP-Archive und komfortables Lesen.</p>
+          <div class="app-recommend">
+            <div class="app-recommend__head">
+              <span class="app-recommend__icon">📁</span>
+              <div>
+                <b>Documents von Readdle</b>
+                <div class="muted small">Kostenloser Dateimanager &amp; Medien-Hub</div>
+              </div>
+            </div>
+            <p class="small"><b>Unterstützt:</b> PDF, EPUB, ZIP, RAR, TXT, Office-Dokumente, Fotos, Audio &amp; Video.</p>
+            <p class="small"><b>So geht's:</b> Nach der Installation erscheint in Dino der Ordner <b>„Documents“</b>. Hier kannst du Unterordner erstellen, Archive entpacken und Dateien organisieren.</p>
+            <button class="btn btn--small" data-open="https://apps.apple.com/app/documents-file-manager-app/id364901807">Im Apple App Store ansehen ↗</button>
+          </div>
+        </section>
+
+        <!-- App Empfehlung 3: Kindle & Bücher -->
+        <section class="card help-card">
+          <div class="card__head">
+            <h3>📚 E-Books &amp; 🎨 Zeichnungen</h3>
+          </div>
+          <ul class="help-list">
+            <li><b>Amazon Kindle:</b> Kopiere PDF-Dokumente oder E-Books in den Ordner <i>Kindle</i>. Sie erscheinen automatisch in der Kindle-Bibliothek auf dem iPad.</li>
+            <li><b>Autodesk Sketchbook:</b> Kopiere Skizzen und Bilder (TIFF, PNG, PSD) in den Ordner <i>Sketchbook</i> zum Weiterzeichnen.</li>
+          </ul>
+        </section>
+
+        <!-- Verbindung & Datenkabel -->
+        <section class="card help-card">
+          <div class="card__head">
+            <h3>🔌 USB-Datenkabel &amp; Apple Geräte</h3>
+          </div>
+          <div class="cable-alert" style="margin: 0 0 12px 0; max-width: 100%;">
+            <div class="cable-alert__icon">⚠️</div>
+            <div class="cable-alert__body">
+              <b>Typischer Fehler: Ladekabel statt Datenkabel</b>
+              <p>Reine Ladekabel übertragen nur Strom. Wenn Dino dein iPad nicht erkennt, teste ein anderes Kabel oder das originale Apple-Kabel.</p>
+            </div>
+          </div>
+          <ol class="help-list">
+            <li><b>Apple Geräte App (Windows 10/11):</b> Stellt die nötigen Apple-USB-Dienste bereit.
+              <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap">
+                <button class="btn btn--small btn--primary" id="btnHelpLaunchApple">🚀 Apple Geräte öffnen</button>
+                <button class="btn btn--small" data-open="ms-windows-store://pdp/?productid=9NP83LWLPZ9K">🛒 Im Microsoft Store laden</button>
+              </div>
+            </li>
+            <li style="margin-top:8px"><b>Bildschirm entsperren:</b> Das iPhone/iPad muss entsperrt sein.</li>
+            <li style="margin-top:4px"><b>Computer vertrauen:</b> Bei der Abfrage auf dem Display auf <b>„Vertrauen“</b> tippen und den Geräte-Code eingeben.</li>
+          </ol>
+        </section>
+
+        <!-- Lokaler Speicherort auf dem PC -->
+        <section class="card help-card">
+          <div class="card__head">
+            <h3>💾 Lokaler Zielordner auf dem PC</h3>
+          </div>
+          <p class="muted small">Hier speichert Dino Dateien, die du vom iPad auf den PC kopierst:</p>
+          <div class="path" id="baseDir">…</div>
+          <div class="help__actions">
+            <button class="btn btn--small" id="btnBaseOpen">📂 Ordner im Explorer öffnen</button>
+            <button class="btn btn--small" id="btnBaseChange">Pfad ändern …</button>
+          </div>
+          <p class="muted small" id="versionInfo"></p>
+        </section>
+      </div>
+    </main>
+
+    <!-- Footer mit Sauropod -->
+    <footer class="footer">
+      <div class="footer__brand">
+        <img class="footer__sauro" src="dino_hero.png" alt="Dino">
+        <span><b>Dino-Apple-Transfer 🦕</b> · Direkte USB-Kabelverbindung für iPhone &amp; iPad · 100% lokal</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Drag-Overlay mit Sauropod -->
+  <div class="drop-overlay" id="dropOverlay">
+    <div class="drop-overlay__box">
+      <img class="drop-overlay__sauro" src="dino_hero.png" alt="Dino Sauropod">
+      <div class="drop-overlay__title">Dateien loslassen!</div>
+      <div class="drop-overlay__target" id="dropTarget"></div>
+    </div>
+  </div>
+
+  <!-- Übertragungen -->
+  <aside class="jobs" id="jobs" hidden>
+    <div class="jobs__head">🦕 Aktive Übertragungen</div>
+    <ul id="jobList"></ul>
+  </aside>
+
+  <!-- Allgemeiner Dialog -->
+  <dialog class="dialog" id="dialog">
+    <form method="dialog">
+      <h3 id="dlgTitle"></h3>
+      <p id="dlgText" class="muted"></p>
+      
+      <!-- Optionale App-Auswahl für Ordneranlage/Übertragung im Root-Verzeichnis -->
+      <div id="dlgSelectWrap" hidden style="margin-bottom:12px">
+        <label for="dlgSelect" class="small muted" style="display:block;margin-bottom:4px">In welchem App-Ordner?</label>
+        <select class="input" id="dlgSelect"></select>
+      </div>
+
+      <input class="input" id="dlgInput" hidden>
+      <div class="dialog__actions">
+        <button class="btn" value="cancel">Abbrechen</button>
+        <button class="btn btn--primary" value="ok" id="dlgOk">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts"></div>
+</body>
+</html>
