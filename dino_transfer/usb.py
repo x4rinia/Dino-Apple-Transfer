@@ -103,7 +103,7 @@ class Job:
 
 
 class UsbBridge:
-    def __init__(self, emit: Callable[[dict], None]):
+    def __init__(self, emit: Callable[[dict], None], allow_wireless: bool = True):
         self._emit = emit
         self._ld_lock = None
         self.loop = asyncio.new_event_loop()
@@ -111,6 +111,12 @@ class UsbBridge:
         self._thread.start()
         self._lockdown = None
         self._serial: Optional[str] = None
+        self._conn_mode: str = "usb"
+        self._cable_plugged: bool = False
+        self._wifi_available: bool = False
+        self._had_cable_while_paused: bool = False
+        self.allow_wireless: bool = allow_wireless
+        self.service_paused: bool = False
         self._icons: dict[str, Optional[str]] = {}
         self.jobs: dict[str, Job] = {}
         self._active_transfer = False
@@ -180,26 +186,103 @@ class UsbBridge:
         from pymobiledevice3.lockdown import create_using_usbmux
 
         devices = await usbmux.list_devices()
-        if not devices:
-            await self._drop_lockdown()
-            raise UsbError("no_device", "Kein Apple-Gerät per USB gefunden.")
-
-        # Bevorzuge USB, fallback auf Network (Wi-Fi Sync)
         usb_devices = [d for d in devices if d.is_usb]
-        target = usb_devices[0] if usb_devices else devices[0]
+        net_devices = [d for d in devices if not d.is_usb]
+        self._cable_plugged = len(usb_devices) > 0
+        self._wifi_available = len(net_devices) > 0
+
+        if self.service_paused:
+            await self._drop_lockdown()
+            # Wenn das Kabel während der Pause abgezogen und danach frisch wieder eingesteckt wird, automatisch freigeben:
+            if not self._cable_plugged:
+                self._had_cable_while_paused = False
+                raise UsbError(
+                    "paused",
+                    "Verbindung getrennt & USB-Kabel ist abgezogen ✅",
+                    "Das Kabel wurde sicher entfernt. Stecke das USB-Kabel wieder an oder klicke auf „Jetzt wieder verbinden“, sobald du weiterarbeiten möchtest.",
+                )
+            raise UsbError(
+                "paused",
+                "Verbindung manuell getrennt ✅",
+                "Die Sitzung zum iPad ist beendet. Du kannst das USB-Kabel jetzt sicher abziehen – oder klicke unten auf „Jetzt wieder verbinden“, um die Verbindung erneut zu starten.",
+            )
+
+        if usb_devices:
+            target = usb_devices[0]
+            desired_conn = "USB"
+            conn_mode = "usb"
+        elif net_devices and self.allow_wireless:
+            target = net_devices[0]
+            desired_conn = "Network"
+            conn_mode = "wifi"
+        else:
+            await self._drop_lockdown()
+            if net_devices and not self.allow_wireless:
+                raise UsbError(
+                    "no_device",
+                    "USB-Kabel abgezogen (Apple-Funk ist ausgeschaltet).",
+                    "Stecke das USB-Kabel wieder an oder klicke unten auf „Jetzt wieder verbinden“, um Apple-Funk einzuschalten.",
+                )
+            raise UsbError("no_device", "Kein Apple-Gerät per USB-Kabel oder Apple-Funk verbunden.")
+
         serial = target.serial
 
-        if self._lockdown is not None and self._serial == serial:
+        if self._lockdown is not None and self._serial == serial and self._conn_mode == conn_mode:
             return self._lockdown
 
         await self._drop_lockdown()
         async with self.ld_lock:
-            # Verbinde mit usbmux
-            conn_type = "USB" if target.is_usb else None
-            self._lockdown = await create_using_usbmux(serial=serial, autopair=True, connection_type=conn_type)
+            self._lockdown = await create_using_usbmux(serial=serial, autopair=True, connection_type=desired_conn)
         self._serial = serial
-        log.info("Verbunden mit %s (%s)", self._lockdown.short_info.get("DeviceName"), conn_type or "Auto")
+        self._conn_mode = conn_mode
+        log.info("Verbunden mit %s (%s)", self._lockdown.short_info.get("DeviceName"), conn_mode.upper())
         return self._lockdown
+
+    def set_allow_wireless(self, allow: bool) -> dict:
+        self.allow_wireless = bool(allow)
+        if not self.allow_wireless and self._conn_mode == "wifi":
+            try:
+                self._call(self._drop_lockdown(), timeout=5)
+            except Exception:
+                pass
+        return {"ok": True, "allowWireless": self.allow_wireless}
+
+    def stop_connection_service(self) -> dict:
+        """Trennt die aktive USB-Sitzung sofort, damit man testweise neu verbinden oder das Kabel sicher abziehen kann."""
+        self.service_paused = True
+        self._had_cable_while_paused = self._cable_plugged
+        try:
+            self._call(self._drop_lockdown(), timeout=5)
+        except Exception:
+            pass
+        return {"ok": True, "servicePaused": True}
+
+    def start_connection_service(self) -> dict:
+        """Hebt die manuelle Trennung auf und verbindet sich wieder (startet bei Bedarf auch den Apple-Hintergrunddienst)."""
+        self.service_paused = False
+        self._had_cable_while_paused = False
+        # Prüfen ob Port 27015 (AppleMobileDeviceProcess) offen ist, sonst starten
+        if not self._is_driver_running():
+            try:
+                cmd = (
+                    "$pkg = Get-AppxPackage *AppleDevices* -ErrorAction SilentlyContinue; "
+                    "if ($pkg) { "
+                    "  $exe = Join-Path $pkg.InstallLocation 'AppleMobileDeviceProcess.exe'; "
+                    "  if (Test-Path $exe) { Start-Process -FilePath $exe -WindowStyle Hidden } "
+                    "}"
+                )
+                subprocess.run(["powershell", "-NoProfile", "-Command", cmd], timeout=5)
+            except Exception:
+                pass
+        return {"ok": True, "servicePaused": False}
+
+    @staticmethod
+    def _is_driver_running() -> bool:
+        try:
+            with socket.create_connection(("127.0.0.1", 27015), timeout=0.3):
+                return True
+        except OSError:
+            return False
 
     async def _drop_lockdown(self) -> None:
         ld, self._lockdown, self._serial = self._lockdown, None, None
@@ -234,12 +317,24 @@ class UsbBridge:
 
     # ------------------------------------------------------------------ Status
     def status(self) -> dict:
+        driver_running = self._is_driver_running()
         try:
-            return self._call(self._status(), timeout=15)
+            res = self._call(self._status(), timeout=15)
         except UsbError as e:
-            return {"state": e.code, "message": e.message, "details": e.details}
+            res = {"state": e.code, "message": e.message, "details": e.details}
         except Exception as e:
-            return {"state": "error", "message": str(e)}
+            res = {"state": "error", "message": str(e)}
+        res["allowWireless"] = self.allow_wireless
+        res["servicePaused"] = self.service_paused
+        res["cablePlugged"] = self._cable_plugged
+        res["wifiAvailable"] = self._wifi_available
+        res["driverRunning"] = driver_running
+        if "device" in res and isinstance(res["device"], dict):
+            res["device"]["driverRunning"] = driver_running
+            res["device"]["cablePlugged"] = self._cable_plugged
+            res["device"]["allowWireless"] = self.allow_wireless
+            res["device"]["connMode"] = self._conn_mode
+        return res
 
     async def _status(self) -> dict:
         # Während eines aktiven Transfers keine störenden Abfragen senden
@@ -251,6 +346,10 @@ class UsbBridge:
                     "name": self._lockdown.short_info.get("DeviceName") or "Apple-Gerät",
                     "class": self._lockdown.short_info.get("DeviceClass") or "Gerät",
                     "ios": self._lockdown.short_info.get("ProductVersion") or "",
+                    "connMode": self._conn_mode,
+                    "wifiAvailable": self._wifi_available,
+                    "allowWireless": self.allow_wireless,
+                    "transferActive": True,
                 },
             }
 
@@ -269,6 +368,10 @@ class UsbBridge:
             "ios": info.get("ProductVersion") or "",
             "class": dev_class,
             "isIPhone": "iphone" in dev_class.lower(),
+            "connMode": self._conn_mode,
+            "wifiAvailable": self._wifi_available,
+            "allowWireless": self.allow_wireless,
+            "transferActive": self._active_transfer,
         }
         try:
             device["battery"] = await ld.get_value(domain="com.apple.mobile.battery", key="BatteryCurrentCapacity")

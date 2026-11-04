@@ -33,8 +33,8 @@ const S = {
 
 /* ================================================================ Helfer */
 function api(name, ...args) {
-  if (!window.pywebview || !window.pywebview.api) {
-    return Promise.reject(new Error('Backend noch nicht bereit'));
+  if (!window.pywebview || !window.pywebview.api || typeof window.pywebview.api[name] !== 'function') {
+    return Promise.reject(new Error(`Backend-Funktion '${name}' ist noch nicht bereit`));
   }
   return window.pywebview.api[name](...args).then((r) => {
     if (!r || !r.ok) {
@@ -152,8 +152,6 @@ function setView(view) {
 }
 $$('.tab').forEach((t) => t.addEventListener('click', () => setView(t.dataset.view)));
 $$('[data-goto]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.goto)));
-$('#btnAppTipsQuick')?.addEventListener('click', () => setView('help'));
-$('#btnTipsPill')?.addEventListener('click', () => setView('help'));
 $$('[data-open]').forEach((b) => b.addEventListener('click', () => api('open_url', b.dataset.open).catch((e) => toast(e.message, 'error'))));
 
 /* ================================================================ Seitenleiste Toggle */
@@ -167,12 +165,19 @@ $('#btnCollapseSidebar')?.addEventListener('click', () => setSidebarCollapsed(tr
 $('#btnExpandSidebar')?.addEventListener('click', () => setSidebarCollapsed(false));
 
 /* ================================================================ USB Status & Erkennung */
-async function checkAppleDevices() {
+let _appleCheckTime = 0;
+async function checkAppleDevices(force = false) {
+  const now = Date.now();
+  if (!force && S.usb.appleStatus && (now - _appleCheckTime < 60000)) {
+    return S.usb.appleStatus;
+  }
   try {
+    _appleCheckTime = now;
     S.usb.appleStatus = await api('apple_devices_status');
   } catch (_) {
     S.usb.appleStatus = { installed: false, running: false };
   }
+  return S.usb.appleStatus;
 }
 
 async function pollUsb() {
@@ -194,13 +199,48 @@ async function pollUsb() {
 
 async function applyUsbStatus(st) {
   const prev = S.usb.state;
+  const prevMode = S.usb.device ? S.usb.device.connMode : null;
   S.usb.state = st.state;
+
+  const allowWifi = st.allowWireless !== false;
+  if ($('#chkAllowWireless')) $('#chkAllowWireless').checked = allowWifi;
+  if ($('#chkAllowWirelessStart')) $('#chkAllowWirelessStart').checked = allowWifi;
+
+  // Treiber-Status ("Apple Geräte") aktualisieren
+  const isInstalled = (S.usb.appleStatus && S.usb.appleStatus.installed) || st.driverRunning;
+  const drvBadge = $('#driverInstalledBadge');
+  const btnStore = $('#btnStoreApple');
+  if (drvBadge && btnStore) {
+    if (isInstalled) {
+      drvBadge.className = 'driver-badge is-ok';
+      drvBadge.textContent = '✅ „Apple Geräte“ (Treiber) wurde bereits installiert';
+      drvBadge.hidden = false;
+      btnStore.hidden = true;
+    } else {
+      drvBadge.className = 'driver-badge is-warn';
+      drvBadge.textContent = '⚠️ Treiber „Apple Geräte“ ist noch nicht installiert:';
+      drvBadge.hidden = false;
+      btnStore.hidden = false;
+    }
+  }
 
   if (st.state === 'ready') {
     const d = st.device;
     S.usb.device = d;
-    setPill('#pillUsb', 'is-ok', `USB: ${d.name}`);
+    if (d.connMode === 'wifi') {
+      setPill('#pillUsb', 'is-wifi', `Apple-Funk: ${d.name}`);
+    } else {
+      setPill('#pillUsb', 'is-ok', `USB-Kabel: ${d.name}`);
+    }
     renderDevice(d);
+
+    if (prev === 'ready' && prevMode && prevMode !== d.connMode) {
+      if (d.connMode === 'wifi') {
+        toast(`🔵 USB-Kabel abgezogen – ${d.name} ist jetzt über Apple-Funk verbunden!`, 'ok');
+      } else {
+        toast(`🟢 USB-Kabel eingesteckt – Volles USB-Tempo aktiv!`, 'ok');
+      }
+    }
 
     const key = `${d.name}|${d.model}`;
     if (key !== S.usb.deviceKey || prev !== 'ready') {
@@ -208,7 +248,9 @@ async function applyUsbStatus(st) {
       $('#usbState').hidden = true;
       $('#usbReady').hidden = false;
       if (prev && prev !== 'ready') {
-        toast(`🦕 ${d.name} ist verbunden!`, 'ok');
+        toast(d.connMode === 'wifi'
+          ? `🔵 ${d.name} per Apple-Funk (kabellos) verbunden!`
+          : `🟢 ${d.name} per USB-Kabel verbunden!`, 'ok');
       }
       await loadAppsAndInitDino();
     }
@@ -216,42 +258,40 @@ async function applyUsbStatus(st) {
   }
 
   if (prev === 'ready') {
-    toast('🔌 Verbindung getrennt', 'warn');
+    toast(
+      st.state === 'paused'
+        ? '🔌 Verbindung getrennt – Du kannst das Kabel abziehen oder testweise neu verbinden'
+        : '🔌 USB-Verbindung getrennt',
+      st.state === 'paused' ? 'ok' : 'warn'
+    );
   }
 
   S.usb.deviceKey = null;
   $('#usbReady').hidden = true;
   $('#usbState').hidden = false;
 
-  await checkAppleDevices();
-
-  const isStoreInstalled = S.usb.appleStatus && S.usb.appleStatus.installed;
-  const storeActions = [];
-
-  if (isStoreInstalled) {
-    storeActions.push({
-      label: '🚀 Apple Geräte öffnen',
-      primary: true,
-      fn: () => api('launch_apple_devices').then(() => { toast('🚀 Apple Geräte aufgerufen', 'ok'); setTimeout(pollUsb, 1500); })
-    });
-    storeActions.push({
-      label: '🛒 Im Microsoft Store öffnen',
-      fn: () => api('open_url', 'ms-windows-store://pdp/?productid=9NP83LWLPZ9K')
-    });
-  } else {
-    storeActions.push({
-      label: '🛒 Apple Geräte im Microsoft Store laden',
-      primary: true,
-      fn: () => api('open_url', 'ms-windows-store://pdp/?productid=9NP83LWLPZ9K')
-    });
+  // Hintergrund-Check, falls noch nicht erfolgt
+  if (!S.usb.appleStatus) {
+    checkAppleDevices().then(() => {
+      renderStoreActions();
+    }).catch(() => {});
   }
-  storeActions.push({ label: '↻ Erneut prüfen', fn: pollUsb });
+
+  renderStoreActions();
 
   let title = 'iPhone oder iPad per USB-Kabel verbinden';
-  let text = 'Dino wartet am USB-Anschluss. Sobald das Gerät verbunden ist, erscheint es automatisch.';
+  let text = 'Dino wartet am USB-Anschluss. Sobald das Gerät per Kabel angeschlossen wird, erkennt er es automatisch.';
   let pillState = [null, 'USB: kein Gerät'];
 
-  if (st.state === 'locked') {
+  const isPaused = st.state === 'paused' || st.servicePaused;
+  if ($('#btnStartService')) $('#btnStartService').hidden = !isPaused;
+  if ($('#btnManualSearch')) $('#btnManualSearch').hidden = isPaused;
+
+  if (isPaused) {
+    title = st.message || 'Verbindung manuell getrennt ✅';
+    text = st.details || 'Die Sitzung zum iPad ist beendet. Du kannst das USB-Kabel jetzt sicher abziehen – oder klicke unten auf „Jetzt wieder verbinden“, um testweise neu zu verbinden.';
+    pillState = ['is-warn', st.cablePlugged ? 'Getrennt (Kabel abziehbar)' : 'Getrennt (Kabel abgezogen)'];
+  } else if (st.state === 'locked') {
     title = 'Gerät bitte entsperren 🔓';
     text = 'Das iPhone/iPad ist gesperrt. Bitte einmal den Bildschirm entsperren.';
     pillState = ['is-warn', 'USB: entsperren'];
@@ -267,22 +307,26 @@ async function applyUsbStatus(st) {
     title = 'Apple-Dienst antwortet nicht';
     text = 'Der Hintergrunddienst (usbmuxd) läuft noch nicht. Klicke auf „Apple Geräte öffnen“, um den Dienst zu starten.';
     pillState = ['is-bad', 'USB: Dienst fehlt'];
+  } else if (st.message && st.details) {
+    title = st.message;
+    text = st.details;
   }
 
   setPill('#pillUsb', pillState[0], pillState[1]);
   $('#usbStateTitle').textContent = title;
   $('#usbStateText').textContent = text;
-  $('#usbStateActions').replaceChildren(
-    ...storeActions.map((a) =>
-      el('button', { class: `btn ${a.primary ? 'btn--primary' : ''}`, text: a.label, onclick: a.fn })
-    )
-  );
+}
 
-  $('#usbStateSteps').replaceChildren(
-    el('li', { text: 'Echtes USB-Datenkabel verwenden (reine Ladekabel übertragen keine Daten).' }),
-    el('li', { text: 'iPhone oder iPad entsperren (Code eingeben).' }),
-    el('li', { text: 'Auf dem Bildschirm bei „Diesem Computer vertrauen?“ auf „Vertrauen“ tippen.' })
-  );
+function renderStoreActions() {
+  const isStoreInstalled = S.usb.appleStatus && S.usb.appleStatus.installed;
+  const drvBadge = $('#driverInstalledBadge');
+  const btnStore = $('#btnStoreApple');
+  if (drvBadge && btnStore && isStoreInstalled) {
+    drvBadge.className = 'driver-badge is-ok';
+    drvBadge.textContent = '✅ „Apple Geräte“ (Treiber) wurde bereits installiert';
+    drvBadge.hidden = false;
+    btnStore.hidden = true;
+  }
 }
 
 function getDeviceRootLabel() {
@@ -291,33 +335,52 @@ function getDeviceRootLabel() {
 }
 
 function renderDevice(d) {
-  $('#devName').textContent = d.name;
-  $('#devIcon').textContent = d.isIPhone ? '📱' : '📲';
+  if ($('#devName')) $('#devName').textContent = d.name;
+  if ($('#devIcon')) $('#devIcon').textContent = d.isIPhone ? '📱' : '📲';
   const rootLabel = getDeviceRootLabel();
-  $('#sidebarHeading').textContent = rootLabel;
-  $('#rootViewLabel').textContent = `Alle App-Ordner auf dem ${d.isIPhone ? 'iPhone' : 'iPad'}`;
-  $('#tabUsb').textContent = `🔌 ${rootLabel} (USB)`;
+  if ($('#sidebarHeading')) $('#sidebarHeading').textContent = rootLabel;
+  if ($('#rootViewLabel')) $('#rootViewLabel').textContent = `Alle App-Ordner auf dem ${d.isIPhone ? 'iPhone' : 'iPad'}`;
+  if ($('#tabUsb')) $('#tabUsb').textContent = `🔌 ${rootLabel} (USB)`;
 
   const parts = [
     d.class || 'Apple-Gerät',
     d.ios ? `iOS ${d.ios}` : '',
     d.battery != null ? `🔋 ${d.battery} %` : ''
   ].filter(Boolean);
-  $('#devMeta').textContent = parts.join(' · ');
+  if ($('#devMeta')) $('#devMeta').textContent = parts.join(' · ');
 
   if (d.diskTotal && d.diskFree != null) {
     const used = d.diskTotal - d.diskFree;
-    $('#devStorage').hidden = false;
-    $('#devStorageFill').style.width = `${Math.min(100, (used / d.diskTotal) * 100).toFixed(1)}%`;
-    $('#devStorageText').textContent = `${fmtBytes(d.diskFree)} frei von ${fmtBytes(d.diskTotal)}`;
+    if ($('#devStorage')) $('#devStorage').hidden = false;
+    if ($('#devStorageFill')) $('#devStorageFill').style.width = `${Math.min(100, (used / d.diskTotal) * 100).toFixed(1)}%`;
+    if ($('#devStorageText')) $('#devStorageText').textContent = `${fmtBytes(d.diskFree)} frei von ${fmtBytes(d.diskTotal)}`;
   } else {
-    $('#devStorage').hidden = true;
+    if ($('#devStorage')) $('#devStorage').hidden = true;
+  }
+
+  // Verbindungs- & Kabel-Status Box aktualisieren
+  const badge = $('#connModeBadge');
+  const hint = $('#connModeHint');
+  const allowWifi = d.allowWireless !== false;
+  if ($('#chkAllowWireless')) $('#chkAllowWireless').checked = allowWifi;
+  if ($('#chkAllowWirelessStart')) $('#chkAllowWirelessStart').checked = allowWifi;
+
+  if (badge && hint) {
+    if (d.connMode === 'wifi') {
+      badge.className = 'conn-box__badge is-wifi';
+      badge.textContent = '🔵 Apple-Funk aktiv (Kabellos)';
+      hint.innerHTML = '<b>Ohne Kabel verbunden:</b> Läuft kabellos über den Apple-Treiber (kein USB-Kabel eingesteckt). Für maximales Tempo einfach das USB-Kabel anstecken – oder unten auf <b>„Verbindung trennen“</b> klicken.';
+    } else {
+      badge.className = 'conn-box__badge is-usb';
+      badge.textContent = '🟢 USB-Kabel aktiv (Volles Tempo)';
+      hint.innerHTML = '<b>Mit USB-Kabel verbunden:</b> Maximale Geschwindigkeit! Ziehst du das Kabel ab, bleibt dein iPad nahtlos per <b>🔵 Apple-Funk</b> verbunden – oder klicke unten auf <b>„Verbindung trennen“</b>.';
+    }
   }
 }
 
 /* ================================================================ Apps & Dino-Transfer Setup */
 async function loadAppsAndInitDino() {
-  $('#appList').replaceChildren(el('li', { class: 'muted small', text: 'Lade Apps …' }));
+  if ($('#appList')) $('#appList').replaceChildren(el('li', { class: 'muted small', text: 'Lade Apps …' }));
   try {
     S.usb.apps = await api('usb_apps');
   } catch (e) {
@@ -345,11 +408,11 @@ async function loadAppsAndInitDino() {
 }
 
 function renderApps() {
-  const q = $('#appSearch').value.trim().toLowerCase();
+  const q = ($('#appSearch')?.value || '').trim().toLowerCase();
   const apps = S.usb.apps.filter((a) => !q || a.name.toLowerCase().includes(q) || a.bundle.toLowerCase().includes(q));
-  $('#appsEmpty').hidden = S.usb.apps.length > 0;
+  if ($('#appsEmpty')) $('#appsEmpty').hidden = S.usb.apps.length > 0;
   
-  $('#appList').replaceChildren(...apps.map((a) => {
+  $('#appList')?.replaceChildren(...apps.map((a) => {
     const icon = S.usb.icons[a.bundle];
     const isActive = S.usb.mode === 'app' && S.usb.app && S.usb.app.bundle === a.bundle;
     return el('li', {
@@ -364,18 +427,20 @@ function renderApps() {
     ));
   }));
 }
-$('#appSearch').addEventListener('input', renderApps);
-$('#appsReload').addEventListener('click', () => { S.usb.icons = {}; loadAppsAndInitDino(); });
+$('#appSearch')?.addEventListener('input', renderApps);
+$('#appsReload')?.addEventListener('click', () => { S.usb.icons = {}; loadAppsAndInitDino(); });
 
 /* ================================================================ Navigation */
 // Toggle für optionale andere Apps
 let otherAppsVisible = false;
 $('#btnToggleOtherApps')?.addEventListener('click', () => {
   otherAppsVisible = !otherAppsVisible;
-  $('#otherAppsSection').hidden = !otherAppsVisible;
-  $('#btnToggleOtherApps').textContent = otherAppsVisible
-    ? '▲ Andere App-Ordner verbergen'
-    : '▼ Andere App-Ordner anzeigen (optional)';
+  if ($('#otherAppsSection')) $('#otherAppsSection').hidden = !otherAppsVisible;
+  if ($('#btnToggleOtherApps')) {
+    $('#btnToggleOtherApps').textContent = otherAppsVisible
+      ? '▲ Andere App-Ordner verbergen'
+      : '▼ Andere App-Ordner anzeigen (optional)';
+  }
 });
 
 // 1. Dino-Transfer Hauptordner (Standard)
@@ -411,7 +476,7 @@ function selectDinoFolder(keepSubpath = false) {
   renderApps();
   loadDir(S.usb.path);
 }
-$('#btnDinoFolder').addEventListener('click', () => selectDinoFolder(false));
+$('#btnDinoFolder')?.addEventListener('click', () => selectDinoFolder(false));
 
 // 2. Übersicht aller Ordner auf dem iPad
 function selectRootView() {
@@ -426,7 +491,7 @@ function selectRootView() {
   renderApps();
   renderBrowser();
 }
-$('#btnRootView').addEventListener('click', selectRootView);
+$('#btnRootView')?.addEventListener('click', selectRootView);
 
 // 3. Spezifische App auswählen (vom Nutzer selbst angeklickt)
 function selectApp(app) {
@@ -610,7 +675,7 @@ function renderDirEntries(rows) {
     rows.push(el('tr', {
       class: `${sel ? 'is-selected' : ''} ${e.isDir ? 'is-dir-row' : ''}`,
       onclick: () => toggleSel(e.path),
-      ondblclick: open || (() => pullItems([e.path])),
+      ondblclick: open || (() => pullItems([e.path], true)),
     },
     el('td', { class: 'col-check' }, cb),
     el('td', {}, el('div', { class: 'fname', title: e.name },
@@ -621,7 +686,7 @@ function renderDirEntries(rows) {
     el('td', { class: 'col-size', text: e.isDir ? '—' : fmtBytes(e.size) }),
     el('td', { class: 'col-date', text: fmtDate(e.mtime) }),
     el('td', {}, el('div', { class: 'row-actions' },
-      el('button', { class: 'icon-btn', title: e.isDir ? 'Ordner auf PC kopieren' : 'Auf PC kopieren', text: '⬇', onclick: (ev) => { ev.stopPropagation(); pullItems([e.path]); } }),
+      el('button', { class: 'icon-btn', title: 'Speichern unter …', text: '⬇', onclick: (ev) => { ev.stopPropagation(); pullItems([e.path], true); } }),
       el('button', { class: 'icon-btn', title: 'Umbenennen', text: '✏️', onclick: (ev) => { ev.stopPropagation(); renameItem(e); } }),
       el('button', { class: 'icon-btn', title: e.isDir ? 'Ordner samt Inhalt löschen' : 'Löschen', text: '🗑', onclick: (ev) => { ev.stopPropagation(); deleteItems([e.path]); } })
     ))));
@@ -643,18 +708,23 @@ function updateToolbar() {
   const isRoot = S.usb.mode === 'root';
   const n = S.usb.selected.size;
 
-  ['#btnUsbPull', '#btnUsbPullTo', '#btnUsbDelete'].forEach((id) => {
-    $(id).disabled = isRoot || n === 0;
+  ['#btnUsbPullTo', '#btnUsbDelete'].forEach((id) => {
+    const btn = $(id);
+    if (btn) btn.disabled = isRoot || n === 0;
   });
-  $('#btnUsbPull').textContent = n > 1 ? `⬇ ${n} auf PC kopieren` : '⬇ Auf PC kopieren';
+  if ($('#btnUsbPullTo')) {
+    $('#btnUsbPullTo').textContent = n > 1 ? `⬇ ${n} speichern unter …` : '⬇ Speichern unter …';
+  }
 
   const all = $('#usbCheckAll');
-  all.disabled = isRoot || S.usb.entries.length === 0;
-  all.checked = !isRoot && n > 0 && n === S.usb.entries.length;
-  all.indeterminate = !isRoot && n > 0 && n < S.usb.entries.length;
+  if (all) {
+    all.disabled = isRoot || S.usb.entries.length === 0;
+    all.checked = !isRoot && n > 0 && n === S.usb.entries.length;
+    all.indeterminate = !isRoot && n > 0 && n < S.usb.entries.length;
+  }
 }
 
-$('#usbCheckAll').addEventListener('change', (e) => {
+$('#usbCheckAll')?.addEventListener('change', (e) => {
   if (S.usb.mode === 'root') return;
   S.usb.selected = new Set(e.target.checked ? S.usb.entries.map((x) => x.path) : []);
   renderBrowser();
@@ -745,7 +815,7 @@ async function renameItem(entry) {
 }
 
 /* ================================================================ Buttons & Toolbar Events */
-$('#btnUsbAdd').addEventListener('click', async () => {
+$('#btnUsbAdd')?.addEventListener('click', async () => {
   try {
     const files = await api('pick_files');
     if (files && files.length) pushPaths(files.map((f) => f.path));
@@ -754,7 +824,7 @@ $('#btnUsbAdd').addEventListener('click', async () => {
   }
 });
 
-$('#btnUsbAddFolder').addEventListener('click', async () => {
+$('#btnUsbAddFolder')?.addEventListener('click', async () => {
   try {
     const f = await api('pick_folder');
     if (f) pushPaths([f.path]);
@@ -764,7 +834,7 @@ $('#btnUsbAddFolder').addEventListener('click', async () => {
 });
 
 // Neuer Ordner: Wird direkt in Dino-Transfer bzw. aktuellem Ordner angelegt (keine Nachfragen!)
-$('#btnUsbMkdir').addEventListener('click', async () => {
+$('#btnUsbMkdir')?.addEventListener('click', async () => {
   const target = getActiveTarget();
   if (!target) {
     toast('iPad ist nicht bereit.', 'warn');
@@ -793,12 +863,52 @@ $('#btnUsbMkdir').addEventListener('click', async () => {
   loadDir(target.path);
 });
 
-$('#btnUsbPull').addEventListener('click', () => pullItems([...S.usb.selected]));
-$('#btnUsbPullTo').addEventListener('click', () => pullItems([...S.usb.selected], true));
-$('#btnUsbDelete').addEventListener('click', () => deleteItems([...S.usb.selected]));
-$('#btnUsbRefresh').addEventListener('click', () => {
+$('#btnUsbPullTo')?.addEventListener('click', () => pullItems([...S.usb.selected], true));
+$('#btnUsbDelete')?.addEventListener('click', () => deleteItems([...S.usb.selected]));
+$('#btnUsbRefresh')?.addEventListener('click', () => {
   if (S.usb.mode === 'root') renderBrowser();
   else loadDir(S.usb.path);
+});
+
+async function onToggleWireless(e) {
+  const allow = !!e.target.checked;
+  if ($('#chkAllowWireless')) $('#chkAllowWireless').checked = allow;
+  if ($('#chkAllowWirelessStart')) $('#chkAllowWirelessStart').checked = allow;
+  try {
+    await api('set_wireless_mode', allow);
+    if (S.usb.device) {
+      S.usb.device.allowWireless = allow;
+      renderDevice(S.usb.device);
+    }
+    toast(allow
+      ? '📡 Apple-Funk aktiviert – iPad bleibt auch ohne Kabel verbunden'
+      : '🔌 Strikt nur USB-Kabel aktiv – Verbindung ohne Kabel getrennt', 'ok');
+    await pollUsb();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+$('#chkAllowWireless')?.addEventListener('change', onToggleWireless);
+$('#chkAllowWirelessStart')?.addEventListener('change', onToggleWireless);
+
+$('#btnStopService')?.addEventListener('click', async () => {
+  try {
+    await api('stop_connection_service');
+    await pollUsb();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+});
+
+$('#btnStartService')?.addEventListener('click', async () => {
+  try {
+    toast('▶ Starte Dienst & Verbindung …', 'ok');
+    await api('start_connection_service');
+    await pollUsb();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 });
 
 $('#btnHelpLaunchApple')?.addEventListener('click', () => {
@@ -962,25 +1072,50 @@ window.Dino = {
   },
 };
 
-async function init() {
-  try {
-    S.cfg = await api('get_state');
-  } catch (e) {
-    toast('Backend nicht erreichbar: ' + e.message, 'error');
-    return;
+async function waitForApi(maxMs = 6000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.get_state === 'function') {
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 80));
   }
-  $('#baseDir').textContent = S.cfg.baseDir;
-  $('#versionInfo').textContent = `${S.cfg.displayName || 'Dino-Apple-Transfer'} ${S.cfg.version} · PC: ${S.cfg.pcName}`;
-  $('#btnBaseOpen').addEventListener('click', () => api('open_folder', 'from'));
-  $('#btnBaseChange').addEventListener('click', async () => {
+  return false;
+}
+
+function bindStaticUi() {
+  $('#btnBaseOpen')?.addEventListener('click', () => api('open_folder', 'from'));
+  $('#btnBaseChange')?.addEventListener('click', async () => {
     try {
       const dir = await api('choose_base_dir');
       if (dir) {
         S.cfg.baseDir = dir;
-        $('#baseDir').textContent = dir;
+        if ($('#baseDir')) $('#baseDir').textContent = dir;
         toast('📁 Ordner geändert', 'ok');
       }
     } catch (e) { toast(e.message, 'error'); }
+  });
+
+  // Buttons auf dem Startbildschirm
+  $('#btnManualSearch')?.addEventListener('click', async () => {
+    toast('🔍 Suche nach iPad / iPhone …', 'info');
+    await pollUsb();
+  });
+
+  $('#btnLaunchApple')?.addEventListener('click', async () => {
+    toast('🚀 Öffne Apple Geräte …', 'info');
+    try {
+      await api('launch_apple_devices');
+      setTimeout(pollUsb, 1500);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  });
+
+  $('#btnStoreApple')?.addEventListener('click', () => {
+    api('open_url', 'ms-windows-store://pdp/?productid=9NP83LWLPZ9K').catch(() => {
+      window.open('https://apps.microsoft.com/detail/9np83lwlpz9k', '_blank');
+    });
   });
 
   // Wiederherstellung des Seitenleisten-Status
@@ -988,10 +1123,48 @@ async function init() {
     const saved = localStorage.getItem('dino_sidebar_collapsed');
     if (saved === '1') setSidebarCollapsed(true);
   } catch (_) {}
-
-  pollUsb();
-  setInterval(pollUsb, 4000);
 }
 
-if (window.pywebview && window.pywebview.api) init();
-else window.addEventListener('pywebviewready', init, { once: true });
+async function init() {
+  bindStaticUi();
+
+  const ready = await waitForApi();
+  if (!ready) {
+    toast('⚠️ Backend-Verbindung verzögert. Dino versucht weiter zu verbinden …', 'warn');
+  }
+
+  try {
+    S.cfg = await api('get_state');
+    if ($('#baseDir')) $('#baseDir').textContent = S.cfg.baseDir;
+    if ($('#versionInfo')) $('#versionInfo').textContent = `${S.cfg.displayName || 'Dino-Apple-Transfer'} ${S.cfg.version} · PC: ${S.cfg.pcName}`;
+  } catch (_) {}
+
+  // Initiale Hintergrundprüfung der Apple-Dienste (nicht-blockierend)
+  checkAppleDevices().then(renderStoreActions).catch(() => {});
+
+  // Adaptive Polling-Schleife: 1200ms wenn nicht verbunden, 3500ms wenn verbunden
+  async function pollLoop() {
+    try {
+      await pollUsb();
+    } catch (_) {}
+    const delay = (S.usb.state === 'ready') ? 3500 : 1200;
+    setTimeout(pollLoop, delay);
+  }
+  pollLoop();
+}
+
+function start() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+}
+
+start();
+window.addEventListener('pywebviewready', () => {
+  // Falls pywebview nachträglich bereit wird
+  if (!S.cfg || !S.cfg.app) {
+    init();
+  }
+});

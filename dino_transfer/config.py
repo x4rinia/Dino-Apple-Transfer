@@ -20,15 +20,18 @@ def find_ui_dir() -> Path:
     if base:
         candidates.extend([Path(base) / "ui", Path(base), Path(base) / "_internal" / "ui"])
 
+    # 1. Bevorzuge den direkt benachbarten ui-Ordner dieses Pakets
+    module_ui = Path(__file__).resolve().parent.parent / "ui"
+    candidates.append(module_ui)
+
+    # 2. Exe-Verzeichnis
     exe_dir = Path(sys.executable).resolve().parent
     candidates.extend([
         exe_dir / "ui",
         exe_dir / "_internal" / "ui",
     ])
 
-    module_ui = Path(__file__).resolve().parent.parent / "ui"
     candidates.extend([
-        module_ui,
         Path.cwd() / "ui",
         Path.cwd() / "_internal" / "ui",
     ])
@@ -46,14 +49,18 @@ SETTINGS_FILE = DATA_DIR / "settings.json"
 LOG_FILE = DATA_DIR / "dino.log"
 
 
-def _default_base_dir() -> Path:
+def _default_save_dir() -> Path:
+    dl = Path.home() / "Downloads"
+    if dl.is_dir():
+        return dl
     docs = Path.home() / "Documents"
-    return (docs if docs.is_dir() else Path.home()) / "Dino-Transfer"
+    return docs if docs.is_dir() else Path.home()
 
 
 DEFAULTS = {
-    "base_dir": str(_default_base_dir()),
+    "base_dir": str(_default_save_dir()),
     "last_app": None,
+    "allow_wireless": True,
 }
 
 
@@ -70,7 +77,11 @@ class Settings:
                 self.data.update(json.loads(old_settings.read_text(encoding="utf-8")))
         except Exception:
             log.exception("Einstellungen konnten nicht gelesen werden")
-        self.ensure_dirs()
+
+        # Falls noch ein alter Dino-Transfer Pfad in den Einstellungen steht, auf Standard zurücksetzen
+        if "Dino-Transfer" in str(self.data.get("base_dir", "")):
+            self.data["base_dir"] = str(_default_save_dir())
+            self.save()
 
     def get(self, key, default=None):
         return self.data.get(key, default)
@@ -85,40 +96,29 @@ class Settings:
 
     @property
     def base_dir(self) -> Path:
-        return Path(self.data["base_dir"])
+        p = Path(self.data.get("base_dir") or _default_save_dir())
+        return p if p.is_dir() else _default_save_dir()
 
     @property
     def to_device_dir(self) -> Path:
-        # Fallback to existing "Zum iPad" folder if present
-        legacy = self.base_dir / "Zum iPad"
-        modern = self.base_dir / "Zum Apple-Gerät"
-        if legacy.is_dir() and not modern.exists():
-            return legacy
-        return modern
+        return self.base_dir
 
     @property
     def from_device_dir(self) -> Path:
-        legacy = self.base_dir / "Vom iPad"
-        modern = self.base_dir / "Vom Apple-Gerät"
-        if legacy.is_dir() and not modern.exists():
-            return legacy
-        return modern
+        return self.base_dir
 
     # Aliases
     @property
     def to_ipad_dir(self) -> Path:
-        return self.to_device_dir
+        return self.base_dir
 
     @property
     def from_ipad_dir(self) -> Path:
-        return self.from_device_dir
+        return self.base_dir
 
     def ensure_dirs(self) -> None:
-        for d in (self.to_device_dir, self.from_device_dir):
-            try:
-                d.mkdir(parents=True, exist_ok=True)
-            except OSError:
-                log.exception("Ordner konnte nicht angelegt werden: %s", d)
+        # Legt keinen Dino-Transfer-Ordner mehr unter Dokumente an!
+        pass
 
 
 _BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')

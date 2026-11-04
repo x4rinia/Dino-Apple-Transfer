@@ -69,7 +69,7 @@ class Api:
         self._window = None
         self._events: "queue.Queue[dict]" = queue.Queue()
         self._ready = threading.Event()
-        self._usb = UsbBridge(self._emit)
+        self._usb = UsbBridge(self._emit, allow_wireless=True)
         self._dnd_bound = False
         threading.Thread(target=self._pump, name="dino-events", daemon=True).start()
 
@@ -88,6 +88,16 @@ class Api:
 
     def _on_loaded(self) -> None:
         self._ready.set()
+        log.info("pywebview on_loaded Event gefeuert")
+        try:
+            loc = self._window.evaluate_js("window.location.href")
+            log.info("Window location: %s", loc)
+            t_init = self._window.evaluate_js("typeof init")
+            log.info("typeof init: %s", t_init)
+            # Init direkt anstoßen falls Event verpasst
+            self._window.evaluate_js("if (typeof init === 'function') init();")
+        except Exception as e:
+            log.warning("evaluate_js Fehler: %s", e)
         if not self._dnd_bound:
             self._dnd_bound = True
             try:
@@ -109,6 +119,7 @@ class Api:
     # ------------------------------------------------------------ Allgemein
     @api_method
     def get_state(self):
+        log.info("API get_state aufgerufen!")
         return {
             "app": APP_NAME,
             "displayName": DISPLAY_NAME,
@@ -175,7 +186,9 @@ class Api:
     # ------------------------------------------------------------ USB & Dateimanager
     @api_method
     def usb_status(self):
-        return self._usb.status()
+        res = self._usb.status()
+        log.info("API usb_status -> %s (Gerät: %s)", res.get("state"), (res.get("device") or {}).get("name"))
+        return res
 
     @api_method
     def usb_apps(self):
@@ -211,16 +224,31 @@ class Api:
 
     @api_method
     def usb_pull(self, bundle: str, app_name: str, remote_paths: list, local_dir: str = ""):
-        target = local_dir or str(self._settings.from_device_dir)
-        return self._usb.start_pull(bundle, app_name, list(remote_paths), target)
+        return self.usb_pull_to(bundle, app_name, remote_paths)
 
     @api_method
     def usb_pull_to(self, bundle: str, app_name: str, remote_paths: list):
-        res = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=str(self._settings.from_device_dir))
+        res = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=str(self._settings.base_dir))
         if not res:
             return None
         p = res[0] if isinstance(res, (list, tuple)) else res
-        return self._usb.start_pull(bundle, app_name, list(remote_paths), str(p))
+        chosen = Path(p)
+        if chosen.is_dir():
+            self._settings.set("base_dir", str(chosen))
+        return self._usb.start_pull(bundle, app_name, list(remote_paths), str(chosen))
+
+    @api_method
+    def set_wireless_mode(self, allow: bool):
+        self._settings.set("allow_wireless", bool(allow))
+        return self._usb.set_allow_wireless(bool(allow))
+
+    @api_method
+    def stop_connection_service(self):
+        return self._usb.stop_connection_service()
+
+    @api_method
+    def start_connection_service(self):
+        return self._usb.start_connection_service()
 
     @api_method
     def job_cancel(self, job_id: str):
@@ -264,17 +292,62 @@ def get_webview_storage_path() -> str:
     return str(base)
 
 
+def _apply_windows_icon(window_title: str) -> None:
+    """Setzt das Taskleisten- und Titelleisten-Icon unter Windows sauber."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    import time
+
+    def _setter():
+        ico = UI_DIR / "app.ico"
+        if not ico.exists():
+            return
+        user32 = ctypes.windll.user32
+        for _ in range(20):  # bis zu 2 Sekunden warten, bis das Fenster da ist
+            hwnd = user32.FindWindowW(None, window_title)
+            if hwnd:
+                try:
+                    IMAGE_ICON = 1
+                    LR_LOADFROMFILE = 0x00000010
+                    LR_DEFAULTSIZE = 0x00000040
+                    WM_SETICON = 0x0080
+                    h_icon_sm = user32.LoadImageW(None, str(ico), IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
+                    h_icon_lg = user32.LoadImageW(None, str(ico), IMAGE_ICON, 256, 256, LR_LOADFROMFILE)
+                    if h_icon_sm:
+                        user32.SendMessageW(hwnd, WM_SETICON, 0, h_icon_sm)  # ICON_SMALL
+                    if h_icon_lg:
+                        user32.SendMessageW(hwnd, WM_SETICON, 1, h_icon_lg)  # ICON_BIG
+                    log.info("Windows Taskleisten-Icon erfolgreich zugewiesen")
+                    break
+                except Exception:
+                    pass
+            time.sleep(0.1)
+
+    threading.Thread(target=_setter, name="dino-icon-setter", daemon=True).start()
+
+
 def main() -> None:
     try:
         setup_logging()
         log.info("%s %s startet (USB-Kabel)", DISPLAY_NAME, VERSION)
         log.info("UI_DIR: %s (exists: %s)", UI_DIR, (UI_DIR / "index.html").exists())
+
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                # Windows App ID setzen, damit das Taskleisten-Icon nicht das Standard-Python-Icon nutzt
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Dino.Apple.Transfer.Mascot.2.0")
+            except Exception:
+                pass
+
         settings = Settings()
         api = Api(settings)
         sp = get_webview_storage_path()
         log.info("Storage Path: %s", sp)
+        win_title = f"{DISPLAY_NAME} 🦕 – USB-Kabelverbindung für iPhone & iPad"
         window = webview.create_window(
-            f"{DISPLAY_NAME} 🦕 – USB-Kabelverbindung für iPhone & iPad",
+            win_title,
             url=(UI_DIR / "index.html").as_uri(),
             js_api=api,
             width=1340,
@@ -286,6 +359,9 @@ def main() -> None:
         api._window = window
         window.events.loaded += api._on_loaded
         window.events.closed += api._shutdown
+
+        _apply_windows_icon(win_title)
+
         webview.start(
             debug="--debug" in sys.argv,
             private_mode=False,
