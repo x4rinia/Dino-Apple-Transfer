@@ -431,6 +431,18 @@ $('#appSearch')?.addEventListener('input', renderApps);
 $('#appsReload')?.addEventListener('click', () => { S.usb.icons = {}; loadAppsAndInitDino(); });
 
 /* ================================================================ Navigation */
+// Toggle für "Wo finde ich den Ordner auf dem iPad?" (über i-Button)
+let tabletHintVisible = false;
+function toggleTabletHint(ev) {
+  if (ev) ev.stopPropagation();
+  tabletHintVisible = !tabletHintVisible;
+  if ($('#dinoTabletHint')) $('#dinoTabletHint').hidden = !tabletHintVisible;
+  $('#btnToggleTabletHint')?.classList.toggle('is-active', tabletHintVisible);
+  $('#btnDinoInfoInline')?.classList.toggle('is-active', tabletHintVisible);
+}
+$('#btnToggleTabletHint')?.addEventListener('click', toggleTabletHint);
+$('#btnDinoInfoInline')?.addEventListener('click', toggleTabletHint);
+
 // Toggle für optionale andere Apps
 let otherAppsVisible = false;
 $('#btnToggleOtherApps')?.addEventListener('click', () => {

@@ -93,6 +93,7 @@
             <div class="card__head">
               <h3 id="sidebarHeading">Auf meinem iPad</h3>
               <div class="head-actions">
+                <button class="icon-btn icon-btn--info" id="btnToggleTabletHint" title="Info: Wo finde ich die Dateien auf dem iPad?">i</button>
                 <button class="icon-btn" id="appsReload" title="Apps neu laden">↻</button>
                 <button class="icon-btn" id="btnCollapseSidebar" title="Seitenleiste ausblenden">◀</button>
               </div>
@@ -104,10 +105,11 @@
                 <div class="dino-folder-btn__title">🦕 Dino-Transfer</div>
                 <div class="dino-folder-btn__sub">Dein Ordner für alle Dateien</div>
               </div>
+              <span class="dino-folder-btn__info" id="btnDinoInfoInline" title="Wo finde ich die Dateien auf dem iPad?">i</span>
             </button>
 
-            <!-- Deutlicher Hinweis wo man den Ordner auf dem Tablet findet -->
-            <div class="dino-tablet-hint">
+            <!-- Hinweis wo man den Ordner auf dem Tablet findet (über i-Button ein-/ausblendbar) -->
+            <div class="dino-tablet-hint" id="dinoTabletHint" hidden>
               <div class="dino-tablet-hint__icon">📍</div>
               <div class="dino-tablet-hint__body">
                 <b>Auf deinem iPad finden:</b>
@@ -120,9 +122,9 @@
               <button class="btn btn--ghost" id="btnToggleOtherApps">▼ Andere App-Ordner anzeigen (optional)</button>
             </div>
 
-            <div id="otherAppsSection" hidden style="margin-top:8px">
+            <div id="otherAppsSection" class="other-apps-section" hidden>
               <input class="input" id="appSearch" type="search" placeholder="App suchen (z. B. Kindle, Sketchbook) …">
-              <ul class="app-list" id="appList" style="max-height:140px;margin-top:6px"></ul>
+              <ul class="app-list" id="appList"></ul>
             </div>
           </div>
         </aside>

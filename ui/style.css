@@ -226,32 +226,53 @@ b { color: #fff; font-weight: 600; }
 .storage__bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-hi)); border-radius: 99px; }
 .storage__text { font-size: 12px; margin-top: 4px; }
 
-.apps { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.apps { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; overflow-x: hidden; }
 .apps p { margin: 0; }
+.icon-btn--info {
+  font-family: Georgia, serif; font-weight: 800; font-style: italic; font-size: 14px;
+  color: var(--accent); border-color: rgba(234, 179, 8, 0.45); background: rgba(234, 179, 8, 0.08);
+}
+.icon-btn--info.is-active, .icon-btn--info:hover {
+  background: var(--accent); color: var(--ink); border-color: var(--accent);
+}
 
 .dino-folder-btn {
-  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px;
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px;
   background: var(--surface-2); border: 1.5px solid var(--accent); cursor: pointer;
-  transition: all .15s; color: var(--text); width: 100%; text-align: left;
+  transition: all .15s; color: var(--text); width: 100%; text-align: left; flex: none;
   box-shadow: 0 0 16px var(--accent-glow);
 }
 .dino-folder-btn:hover { border-color: var(--accent-hi); background: var(--surface-3); box-shadow: 0 0 20px var(--accent-glow); }
 .dino-folder-btn.is-active { background: var(--accent-soft); border-color: var(--accent); }
-.dino-folder-btn__icon { width: 36px; height: 36px; object-fit: contain; flex: none; filter: drop-shadow(0 0 8px var(--accent-glow)); }
+.dino-folder-btn__icon { width: 34px; height: 34px; object-fit: contain; flex: none; filter: drop-shadow(0 0 8px var(--accent-glow)); }
 .dino-folder-btn__body { min-width: 0; flex: 1; }
 .dino-folder-btn__title { font-weight: 800; font-size: 14px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dino-folder-btn__sub { font-size: 11.5px; color: #d4d4d8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.dino-folder-btn__info {
+  width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  font-family: Georgia, serif; font-weight: 800; font-style: italic; font-size: 13px;
+  border: 1px solid rgba(234, 179, 8, 0.55); background: rgba(234, 179, 8, 0.14); color: var(--accent);
+  transition: all .15s;
+}
+.dino-folder-btn__info:hover, .dino-folder-btn__info.is-active {
+  background: var(--accent); color: var(--ink); border-color: var(--accent);
+}
 
 .dino-tablet-hint {
   background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 12px;
-  padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; margin-top: 4px;
+  padding: 10px 12px; display: flex; align-items: flex-start; gap: 10px; margin-top: 2px; flex: none;
 }
-.dino-tablet-hint__icon { font-size: 20px; flex: none; }
-.dino-tablet-hint__body > b { color: var(--accent); font-size: 13px; display: block; }
-.dino-tablet-hint__body p { margin: 4px 0 0; font-size: 12px; color: #e4e4e7; line-height: 1.45; }
+.dino-tablet-hint[hidden] { display: none !important; }
+.dino-tablet-hint__icon { font-size: 18px; flex: none; }
+.dino-tablet-hint__body > b { color: var(--accent); font-size: 12.5px; display: block; }
+.dino-tablet-hint__body p { margin: 3px 0 0; font-size: 11.8px; color: #e4e4e7; line-height: 1.4; }
 .dino-tablet-hint__body p b { color: var(--accent); font-weight: 700; }
 
-.other-apps-toggle-wrap { margin-top: 10px; }
+.other-apps-toggle-wrap { margin-top: 4px; flex: none; }
+.other-apps-section {
+  display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; margin-top: 4px;
+}
+.other-apps-section[hidden] { display: none !important; }
 .btn--ghost { background: transparent; border: 1px solid #333; color: var(--muted); width: 100%; font-size: 11.5px; padding: 6px 10px; border-radius: 8px; }
 .btn--ghost:hover { border-color: var(--accent); color: var(--text); background: var(--surface-2); }
 
