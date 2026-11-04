@@ -464,9 +464,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .help__actions { display: flex; gap: 8px; margin: 8px 0; }
 
 /* ---------- Footer ---------- */
-.footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 0 10px; border-top: 1px solid #252525; }
+.footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 10px; border-top: 1px solid #252525; }
 .footer__brand { display: flex; align-items: center; gap: 10px; color: #777; font-size: 12px; }
 .footer__sauro { width: 22px; height: 22px; object-fit: contain; filter: drop-shadow(0 0 4px var(--accent-glow)); }
+.footer__credit { font-size: 12px; color: #a1a1aa; letter-spacing: 0.02em; }
+.footer__credit b { color: var(--accent); font-weight: 700; }
 
 /* ---------- Drag-Overlay ---------- */
 .drop-overlay { position: fixed; inset: 0; background: rgba(10,10,10,.82); backdrop-filter: blur(4px); display: none; place-items: center; z-index: 50; pointer-events: none; }
