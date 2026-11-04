@@ -31,15 +31,15 @@
         <div class="state__mascot-wrap">
           <img class="state__sauro" src="dino_hero.png" alt="Dino Ankylosaurus">
         </div>
-        <h2 id="usbStateTitle">iPhone oder iPad verbinden</h2>
-        <p id="usbStateText" class="muted">Stecke dein iPad mit einem echten USB-Datenkabel an (reine Ladekabel übertragen keine Daten) und entsperre den Bildschirm.</p>
+        <h2 id="usbStateTitle">Apple-Gerät verbinden</h2>
+        <p id="usbStateText" class="muted">Stecke dein Apple-Gerät (iPhone oder iPad) mit einem echten USB-Datenkabel an und entsperre den Bildschirm.</p>
         
         <div id="usbStateActions" class="state__actions">
-          <button class="btn btn--primary btn--search" id="btnStartService" hidden title="Stellt die Verbindung zum iPad sofort wieder her">
+          <button class="btn btn--primary btn--search" id="btnStartService" hidden title="Stellt die Verbindung zum Apple-Gerät sofort wieder her">
             🔌 Jetzt wieder verbinden
           </button>
-          <button class="btn btn--primary btn--search" id="btnManualSearch" title="Prüft sofort ob das iPad angeschlossen ist">
-            <span class="btn__icon">↻</span> Jetzt nach iPad suchen
+          <button class="btn btn--primary btn--search" id="btnManualSearch" title="Prüft sofort ob das Apple-Gerät angeschlossen ist">
+            <span class="btn__icon">↻</span> Jetzt nach Apple-Gerät suchen
           </button>
         </div>
 
@@ -56,7 +56,7 @@
             <p style="margin-top:4px;line-height:1.45">
               • <b>Treiber im Hintergrund:</b> Die App <b>„Apple Geräte“</b> dient Windows als Treiber (muss <b>nicht</b> geöffnet werden).<br>
               • <b>🟢 Wann muss das USB-Kabel dran?</b> Beim allerersten Verbinden (zum einmaligen Bestätigen von „Vertrauen“) oder für maximale Geschwindigkeit.<br>
-              • <b>🔵 Wann geht es kabellos per Apple-Funk?</b> Sobald das iPad einmal per Kabel gekoppelt wurde, kannst du das Kabel weglassen oder abziehen und bequem kabellos verbinden.
+              • <b>🔵 Wann geht es kabellos per Apple-Funk?</b> Sobald dein iPhone oder iPad einmal per Kabel gekoppelt wurde, kannst du das Kabel weglassen oder abziehen und bequem kabellos verbinden.
             </p>
           </div>
         </div>
@@ -91,29 +91,39 @@
 
           <div class="card apps">
             <div class="card__head">
-              <h3 id="sidebarHeading">Auf meinem iPad</h3>
+              <h3 id="sidebarHeading">Auf meinem Gerät</h3>
               <div class="head-actions">
-                <button class="icon-btn icon-btn--info" id="btnToggleTabletHint" title="Info: Wo finde ich die Dateien auf dem iPad?">i</button>
+                <button class="icon-btn icon-btn--info" id="btnToggleTabletHint" title="Info: Wo finde ich die Dateien auf dem Gerät?">i</button>
                 <button class="icon-btn" id="appsReload" title="Apps neu laden">↻</button>
                 <button class="icon-btn" id="btnCollapseSidebar" title="Seitenleiste ausblenden">◀</button>
               </div>
             </div>
             <!-- Dino-Transfer Hauptordner Card -->
-            <button class="dino-folder-btn is-active" id="btnDinoFolder" title="Dino-Transfer Hauptordner auf dem iPad">
+            <button class="dino-folder-btn is-active" id="btnDinoFolder" title="Dino-Transfer Hauptordner für alle Dateien">
               <img class="dino-folder-btn__icon" src="dino_hero.png" alt="Dino">
               <div class="dino-folder-btn__body">
                 <div class="dino-folder-btn__title">🦕 Dino-Transfer</div>
                 <div class="dino-folder-btn__sub">Dein Ordner für alle Dateien</div>
               </div>
-              <span class="dino-folder-btn__info" id="btnDinoInfoInline" title="Wo finde ich die Dateien auf dem iPad?">i</span>
+              <span class="dino-folder-btn__info" id="btnDinoInfoInline" title="Wo finde ich die Dateien auf dem Gerät?">i</span>
             </button>
 
-            <!-- Hinweis wo man den Ordner auf dem Tablet findet (über i-Button ein-/ausblendbar) -->
+            <!-- 📸 Dino-Bilder-Transfer Button -->
+            <button class="dino-folder-btn" id="btnPhotosFolder" title="Fotos und Bilder direkt ansehen, übertragen oder exportieren">
+              <span class="dino-folder-btn__icon dino-folder-btn__icon--emoji">📸</span>
+              <div class="dino-folder-btn__body">
+                <div class="dino-folder-btn__title">📸 Dino-Bilder-Transfer</div>
+                <div class="dino-folder-btn__sub">Kamera &amp; Galerie (DCIM)</div>
+              </div>
+              <span class="dino-folder-btn__info" id="btnPhotosInfoInline" title="Info zur Fotogalerie">i</span>
+            </button>
+
+            <!-- Hinweis wo man den Ordner auf dem Tablet/Phone findet (über i-Button ein-/ausblendbar) -->
             <div class="dino-tablet-hint" id="dinoTabletHint" hidden>
-              <div class="dino-tablet-hint__icon">📍</div>
+              <div class="dino-tablet-hint__icon" id="dinoHintIcon">📍</div>
               <div class="dino-tablet-hint__body">
-                <b>Auf deinem iPad finden:</b>
-                <p>Öffne die <b>Dateien-App</b> ➔ <b>Auf meinem iPad</b> ➔ <b>Chrome</b> ➔ <b>Dino-Transfer</b>. Dort liegen all deine übertragenen Ordner &amp; Dateien!</p>
+                <b id="dinoHintTitle">Auf deinem Gerät finden:</b>
+                <p id="dinoHintText">Öffne die <b>Dateien-App</b> ➔ <b>Auf meinem Gerät</b> ➔ <b>Chrome</b> ➔ <b>Dino-Transfer</b>. Dort liegen all deine übertragenen Ordner &amp; Dateien!</p>
               </div>
             </div>
 
@@ -137,18 +147,18 @@
           </div>
 
           <div class="toolbar toolbar--upload">
-            <button class="btn btn--small btn--toggle-sidebar" id="btnExpandSidebar" title="Seitenleiste mit App-Ordnern einblenden" hidden>▶ Apps einblenden</button>
-            <button class="btn" id="btnUsbAdd" title="Einzelne oder mehrere Dateien vom PC auswählen und auf das iPad laden">⬆ Dateien auswählen</button>
-            <button class="btn" id="btnUsbAddFolder" title="Einen ganzen Ordner samt allen Dateien vom PC auswählen und auf das iPad laden">📁 Ordner samt Inhalt laden</button>
-            <span class="toolbar__dnd-hint">✨ oder Dateien &amp; Ordner einfach per <b>Drag &amp; Drop</b> hier einfügen</span>
+            <button class="btn btn--small btn--toggle-sidebar" id="btnExpandSidebar" title="Seitenleiste mit Ordnern einblenden" hidden>▶ Leiste einblenden</button>
+            <button class="btn" id="btnUsbAdd" title="Dateien vom PC auswählen und übertragen">⬆ Dateien auswählen</button>
+            <button class="btn" id="btnUsbAddFolder" title="Einen ganzen Ordner samt Inhalt vom PC übertragen">📁 Ordner übertragen</button>
+            <span class="toolbar__dnd-hint">✨ oder Dateien &amp; Bilder einfach per <b>Drag &amp; Drop</b> hier ablegen</span>
             <span class="toolbar__grow"></span>
             <button class="icon-btn" id="btnUsbRefresh" title="Aktualisieren">↻</button>
           </div>
 
           <div class="toolbar toolbar--actions">
-            <button class="btn" id="btnUsbMkdir" title="Einen neuen Ordner auf dem iPad erstellen">＋📁 Neuer Ordner auf iPad</button>
+            <button class="btn" id="btnUsbMkdir" title="Einen neuen Ordner erstellen">＋📁 Neuer Ordner</button>
             <button class="btn" id="btnUsbPullTo" disabled title="Zielordner auf dem PC frei auswählen (Speichern unter …)">⬇ Speichern unter …</button>
-            <button class="btn btn--danger" id="btnUsbDelete" disabled title="Ausgewählte Dateien/Ordner auf dem iPad löschen">🗑 Ausgewählte löschen</button>
+            <button class="btn btn--danger" id="btnUsbDelete" disabled title="Ausgewählte Dateien/Fotos löschen">🗑 Ausgewählte löschen</button>
           </div>
 
           <div class="filelist-wrap">

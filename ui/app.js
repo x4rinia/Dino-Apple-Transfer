@@ -92,11 +92,22 @@ function fileIcon(name, isDir) {
 }
 
 function toast(text, kind = 'info', action = null, ms = 4200) {
+  const container = $('#toasts');
+  if (!container) return;
+  // Duplicate Toast verhindern
+  const existing = Array.from(container.children).find((t) => t.textContent.trim().startsWith(text.trim()));
+  if (existing) {
+    existing.remove();
+  }
+  // Höchstens 3 Toasts gleichzeitig anzeigen
+  while (container.children.length >= 3) {
+    container.firstElementChild.remove();
+  }
   const node = el('div', { class: `toast toast--${kind}` }, el('span', { text }));
   if (action) {
     node.append(el('button', { class: 'btn btn--small', text: action.label, onclick: () => { action.fn(); node.remove(); } }));
   }
-  $('#toasts').append(node);
+  container.append(node);
   setTimeout(() => { node.classList.add('out'); setTimeout(() => node.remove(), 260); }, ms);
 }
 
@@ -200,7 +211,22 @@ async function pollUsb() {
 async function applyUsbStatus(st) {
   const prev = S.usb.state;
   const prevMode = S.usb.device ? S.usb.device.connMode : null;
-  S.usb.state = st.state;
+
+  if (st.state === 'ready') {
+    S.usb.disconnectTicks = 0;
+    S.usb.state = st.state;
+  } else {
+    // Wenn zuvor verbunden war und kein manueller Pause-Befehl vorliegt:
+    // mindestens 2 aufeinanderfolgende Nicht-Ready-Ticks abwarten, um kurze Usbmuxd-Glitchs abzufangen
+    if (prev === 'ready' && st.state !== 'paused') {
+      S.usb.disconnectTicks = (S.usb.disconnectTicks || 0) + 1;
+      if (S.usb.disconnectTicks < 2) {
+        return;
+      }
+    }
+    S.usb.disconnectTicks = 0;
+    S.usb.state = st.state;
+  }
 
   const allowWifi = st.allowWireless !== false;
   if ($('#chkAllowWireless')) $('#chkAllowWireless').checked = allowWifi;
@@ -261,7 +287,7 @@ async function applyUsbStatus(st) {
     toast(
       st.state === 'paused'
         ? '🔌 Verbindung getrennt – Du kannst das Kabel abziehen oder testweise neu verbinden'
-        : '🔌 USB-Verbindung getrennt',
+        : '🔌 Verbindung getrennt',
       st.state === 'paused' ? 'ok' : 'warn'
     );
   }
@@ -279,7 +305,7 @@ async function applyUsbStatus(st) {
 
   renderStoreActions();
 
-  let title = 'iPhone oder iPad per USB-Kabel verbinden';
+  let title = 'Apple-Gerät per USB-Kabel verbinden';
   let text = 'Dino wartet am USB-Anschluss. Sobald das Gerät per Kabel angeschlossen wird, erkennt er es automatisch.';
   let pillState = [null, 'USB: kein Gerät'];
 
@@ -289,11 +315,11 @@ async function applyUsbStatus(st) {
 
   if (isPaused) {
     title = st.message || 'Verbindung manuell getrennt ✅';
-    text = st.details || 'Die Sitzung zum iPad ist beendet. Du kannst das USB-Kabel jetzt sicher abziehen – oder klicke unten auf „Jetzt wieder verbinden“, um testweise neu zu verbinden.';
+    text = st.details || 'Die Sitzung zum Gerät ist beendet. Du kannst das USB-Kabel jetzt sicher abziehen – oder klicke unten auf „Jetzt wieder verbinden“, um testweise neu zu verbinden.';
     pillState = ['is-warn', st.cablePlugged ? 'Getrennt (Kabel abziehbar)' : 'Getrennt (Kabel abgezogen)'];
   } else if (st.state === 'locked') {
     title = 'Gerät bitte entsperren 🔓';
-    text = 'Das iPhone/iPad ist gesperrt. Bitte einmal den Bildschirm entsperren.';
+    text = 'Das Gerät ist gesperrt. Bitte einmal den Bildschirm entsperren.';
     pillState = ['is-warn', 'USB: entsperren'];
   } else if (st.state === 'trust') {
     title = 'Auf dem Gerät „Vertrauen“ tippen 🤝';
@@ -329,18 +355,29 @@ function renderStoreActions() {
   }
 }
 
-function getDeviceRootLabel() {
-  const isIphone = S.usb.device && (S.usb.device.isIPhone || (S.usb.device.class && S.usb.device.class.toLowerCase().includes('iphone')));
-  return isIphone ? 'Auf meinem iPhone' : 'Auf meinem iPad';
+function getDeviceLabel(d = S.usb.device) {
+  if (!d) return 'Apple-Gerät';
+  const cls = (d.class || '').toLowerCase();
+  if (d.isIPhone || cls.includes('iphone')) return 'iPhone';
+  if (cls.includes('ipad')) return 'iPad';
+  return d.name || 'Apple-Gerät';
+}
+
+function getDeviceRootLabel(d = S.usb.device) {
+  if (!d) return 'Auf meinem Apple-Gerät';
+  return `Auf meinem ${getDeviceLabel(d)}`;
 }
 
 function renderDevice(d) {
+  const devLabel = getDeviceLabel(d);
+  const rootLabel = getDeviceRootLabel(d);
+
   if ($('#devName')) $('#devName').textContent = d.name;
   if ($('#devIcon')) $('#devIcon').textContent = d.isIPhone ? '📱' : '📲';
-  const rootLabel = getDeviceRootLabel();
   if ($('#sidebarHeading')) $('#sidebarHeading').textContent = rootLabel;
-  if ($('#rootViewLabel')) $('#rootViewLabel').textContent = `Alle App-Ordner auf dem ${d.isIPhone ? 'iPhone' : 'iPad'}`;
+  if ($('#rootViewLabel')) $('#rootViewLabel').textContent = `Alle App-Ordner auf dem ${devLabel}`;
   if ($('#tabUsb')) $('#tabUsb').textContent = `🔌 ${rootLabel} (USB)`;
+  if ($('#btnUsbMkdir')) $('#btnUsbMkdir').title = `Einen neuen Ordner auf dem ${devLabel} erstellen`;
 
   const parts = [
     d.class || 'Apple-Gerät',
@@ -369,11 +406,11 @@ function renderDevice(d) {
     if (d.connMode === 'wifi') {
       badge.className = 'conn-box__badge is-wifi';
       badge.textContent = '🔵 Apple-Funk aktiv (Kabellos)';
-      hint.innerHTML = '<b>Ohne Kabel verbunden:</b> Läuft kabellos über den Apple-Treiber (kein USB-Kabel eingesteckt). Für maximales Tempo einfach das USB-Kabel anstecken – oder unten auf <b>„Verbindung trennen“</b> klicken.';
+      hint.innerHTML = `<b>Ohne Kabel verbunden:</b> Läuft kabellos über den Apple-Treiber (kein USB-Kabel eingesteckt). Für maximales Tempo einfach das USB-Kabel anstecken – oder unten auf <b>„Verbindung trennen“</b> klicken.`;
     } else {
       badge.className = 'conn-box__badge is-usb';
       badge.textContent = '🟢 USB-Kabel aktiv (Volles Tempo)';
-      hint.innerHTML = '<b>Mit USB-Kabel verbunden:</b> Maximale Geschwindigkeit! Ziehst du das Kabel ab, bleibt dein iPad nahtlos per <b>🔵 Apple-Funk</b> verbunden – oder klicke unten auf <b>„Verbindung trennen“</b>.';
+      hint.innerHTML = `<b>Mit USB-Kabel verbunden:</b> Maximale Geschwindigkeit! Ziehst du das Kabel ab, bleibt dein ${devLabel} nahtlos per <b>🔵 Apple-Funk</b> verbunden – oder klicke unten auf <b>„Verbindung trennen“</b>.`;
     }
   }
 }
@@ -403,8 +440,14 @@ async function loadAppsAndInitDino() {
       .catch(() => {});
   }
 
-  // Standardmäßig immer direkt in Dino-Transfer starten
-  selectDinoFolder();
+  // Standardmäßig immer direkt in Dino-Transfer oder vorherige Auswahl starten
+  if (S.usb.mode === 'photos') {
+    selectPhotosFolder(true);
+  } else if (S.usb.mode === 'app' && S.usb.app) {
+    selectApp(S.usb.app);
+  } else {
+    selectDinoFolder(true);
+  }
 }
 
 function renderApps() {
@@ -431,17 +474,47 @@ $('#appSearch')?.addEventListener('input', renderApps);
 $('#appsReload')?.addEventListener('click', () => { S.usb.icons = {}; loadAppsAndInitDino(); });
 
 /* ================================================================ Navigation */
-// Toggle für "Wo finde ich den Ordner auf dem iPad?" (über i-Button)
-let tabletHintVisible = false;
-function toggleTabletHint(ev) {
+// Toggle für Info-Boxen (Dino-Transfer oder Fotogalerie)
+let currentHintMode = null;
+function showTabletHint(type = 'dino', ev) {
   if (ev) ev.stopPropagation();
-  tabletHintVisible = !tabletHintVisible;
-  if ($('#dinoTabletHint')) $('#dinoTabletHint').hidden = !tabletHintVisible;
-  $('#btnToggleTabletHint')?.classList.toggle('is-active', tabletHintVisible);
-  $('#btnDinoInfoInline')?.classList.toggle('is-active', tabletHintVisible);
+  const hintEl = $('#dinoTabletHint');
+  if (!hintEl) return;
+  const label = getDeviceLabel();
+  const rootLabel = getDeviceRootLabel();
+
+  if (currentHintMode === type && !hintEl.hidden) {
+    hintEl.hidden = true;
+    currentHintMode = null;
+    $('#btnToggleTabletHint')?.classList.remove('is-active');
+    $('#btnDinoInfoInline')?.classList.remove('is-active');
+    $('#btnPhotosInfoInline')?.classList.remove('is-active');
+    return;
+  }
+
+  currentHintMode = type;
+  hintEl.hidden = false;
+  $('#btnToggleTabletHint')?.classList.add('is-active');
+
+  if (type === 'photos') {
+    $('#btnDinoInfoInline')?.classList.remove('is-active');
+    $('#btnPhotosInfoInline')?.classList.add('is-active');
+    if ($('#dinoHintTitle')) $('#dinoHintTitle').textContent = `📸 Fotos & Bilder auf dem ${label}:`;
+    if ($('#dinoHintText')) {
+      $('#dinoHintText').innerHTML = `Hier hast du direkten Zugriff auf den <b>Kamera-Ordner (DCIM)</b> deines ${label}. Du kannst Fotos/Videos sofort auf deinen PC sichern oder neue Bilder vom PC übertragen!`;
+    }
+  } else {
+    $('#btnDinoInfoInline')?.classList.add('is-active');
+    $('#btnPhotosInfoInline')?.classList.remove('is-active');
+    if ($('#dinoHintTitle')) $('#dinoHintTitle').textContent = `Auf deinem ${label} finden:`;
+    if ($('#dinoHintText')) {
+      $('#dinoHintText').innerHTML = `Öffne die <b>Dateien-App</b> ➔ <b>${rootLabel}</b> ➔ <b>Chrome</b> ➔ <b>Dino-Transfer</b>. Dort liegen all deine übertragenen Ordner &amp; Dateien!`;
+    }
+  }
 }
-$('#btnToggleTabletHint')?.addEventListener('click', toggleTabletHint);
-$('#btnDinoInfoInline')?.addEventListener('click', toggleTabletHint);
+$('#btnToggleTabletHint')?.addEventListener('click', (e) => showTabletHint(S.usb.mode === 'photos' ? 'photos' : 'dino', e));
+$('#btnDinoInfoInline')?.addEventListener('click', (e) => showTabletHint('dino', e));
+$('#btnPhotosInfoInline')?.addEventListener('click', (e) => showTabletHint('photos', e));
 
 // Toggle für optionale andere Apps
 let otherAppsVisible = false;
@@ -479,18 +552,40 @@ function selectDinoFolder(keepSubpath = false) {
     hostAppName: S.usb.dinoInfo.appName,
   };
 
-  if (!keepSubpath || !S.usb.path.startsWith('/Documents/Dino-Transfer')) {
+  if (!keepSubpath || !S.usb.path || !S.usb.path.startsWith('/Documents/Dino-Transfer')) {
     S.usb.path = '/Documents/Dino-Transfer';
   }
 
   $('#btnDinoFolder')?.classList.add('is-active');
+  $('#btnPhotosFolder')?.classList.remove('is-active');
   $('#btnRootView')?.classList.remove('is-active');
   renderApps();
   loadDir(S.usb.path);
 }
 $('#btnDinoFolder')?.addEventListener('click', () => selectDinoFolder(false));
 
-// 2. Übersicht aller Ordner auf dem iPad
+// 1b. Dino-Bilder-Transfer (Direkter Zugriff auf DCIM)
+function selectPhotosFolder(keepSubpath = false) {
+  S.usb.mode = 'photos';
+  S.usb.app = {
+    bundle: '__photos__',
+    name: 'Fotos & Bilder',
+    isPhotos: true,
+  };
+
+  if (!keepSubpath || !S.usb.path || !S.usb.path.startsWith('DCIM')) {
+    S.usb.path = 'DCIM';
+  }
+
+  $('#btnPhotosFolder')?.classList.add('is-active');
+  $('#btnDinoFolder')?.classList.remove('is-active');
+  $('#btnRootView')?.classList.remove('is-active');
+  renderApps();
+  loadDir(S.usb.path);
+}
+$('#btnPhotosFolder')?.addEventListener('click', () => selectPhotosFolder(false));
+
+// 2. Übersicht aller Ordner auf dem Gerät
 function selectRootView() {
   S.usb.mode = 'root';
   S.usb.app = null;
@@ -499,6 +594,7 @@ function selectRootView() {
   S.usb.selected.clear();
 
   $('#btnDinoFolder')?.classList.remove('is-active');
+  $('#btnPhotosFolder')?.classList.remove('is-active');
   $('#btnRootView')?.classList.add('is-active');
   renderApps();
   renderBrowser();
@@ -512,6 +608,7 @@ function selectApp(app) {
   S.usb.path = '/Documents';
 
   $('#btnDinoFolder')?.classList.remove('is-active');
+  $('#btnPhotosFolder')?.classList.remove('is-active');
   $('#btnRootView')?.classList.remove('is-active');
   renderApps();
   loadDir('/Documents');
@@ -532,6 +629,9 @@ async function loadDir(path) {
     if (S.usb.mode === 'dino' && path !== '/Documents/Dino-Transfer') {
       return loadDir('/Documents/Dino-Transfer');
     }
+    if (S.usb.mode === 'photos' && path !== 'DCIM') {
+      return loadDir('DCIM');
+    }
     if (S.usb.mode === 'app' && path !== '/Documents') {
       return loadDir('/Documents');
     }
@@ -546,13 +646,19 @@ async function loadDir(path) {
 
 function relDinoParts() {
   if (S.usb.mode !== 'dino') return [];
-  const rel = S.usb.path.replace(/^\/Documents\/Dino-Transfer\/?/, '');
+  const rel = (S.usb.path || '').replace(/^\/Documents\/Dino-Transfer\/?/, '');
+  return rel ? rel.split('/').filter(Boolean) : [];
+}
+
+function relPhotosParts() {
+  if (S.usb.mode !== 'photos') return [];
+  const rel = (S.usb.path || '').replace(/^DCIM\/?/, '');
   return rel ? rel.split('/').filter(Boolean) : [];
 }
 
 function relAppParts() {
   if (S.usb.mode !== 'app' || !S.usb.app) return [];
-  const rel = S.usb.path.replace(/^\/Documents\/?/, '');
+  const rel = (S.usb.path || '').replace(/^\/Documents\/?/, '');
   return rel ? rel.split('/').filter(Boolean) : [];
 }
 
@@ -628,7 +734,8 @@ function renderBrowser() {
     });
     $('#crumbs').replaceChildren(...crumbs);
     
-    $('#whereHint').innerHTML = `📍 <b>Auf deinem iPad finden:</b> Öffne die <b>Dateien-App</b> ➔ <b>Auf meinem iPad</b> ➔ <b>Chrome</b> ➔ <b>Dino-Transfer</b>`;
+    const devLabel = getDeviceLabel();
+    $('#whereHint').innerHTML = `📍 <b>Auf deinem ${devLabel} finden:</b> Öffne die <b>Dateien-App</b> ➔ <b>${rootLabel}</b> ➔ <b>Chrome</b> ➔ <b>Dino-Transfer</b>`;
 
     const rows = [];
     if (parts.length > 0) {
@@ -638,6 +745,37 @@ function renderBrowser() {
         el('td', {}, el('div', { class: 'fname', onclick: () => loadDir(up) },
           el('span', { class: 'fname__icon is-dir', text: '↩' }),
           el('span', { class: 'fname__text', text: parts.length > 1 ? '.. (zurück)' : '.. (zurück zu Dino-Transfer)' })
+        )),
+        el('td'), el('td', { class: 'col-date' }), el('td')
+      ));
+    }
+
+    renderDirEntries(rows);
+    return;
+  }
+
+  // 2b) DINO-BILDER-TRANSFER (Direkter Zugriff auf DCIM Kamera & Bilder)
+  if (S.usb.mode === 'photos') {
+    const devLabel = getDeviceLabel();
+    const parts = relPhotosParts();
+    const crumbs = [
+      el('button', { text: '📸 Fotos & Bilder (DCIM)', onclick: () => selectPhotosFolder(false), style: 'color: var(--accent); font-weight:800;' })
+    ];
+    parts.forEach((p, i) => {
+      const target = 'DCIM/' + parts.slice(0, i + 1).join('/');
+      crumbs.push(el('span', { class: 'sep', text: '›' }), el('button', { text: p, onclick: () => loadDir(target) }));
+    });
+    $('#crumbs').replaceChildren(...crumbs);
+    $('#whereHint').innerHTML = `📸 <b>Fotos &amp; Bilder:</b> Direkter Zugriff auf die Kamera-Galerie (DCIM) deines ${devLabel}.`;
+
+    const rows = [];
+    if (parts.length > 0) {
+      const up = 'DCIM' + (parts.length > 1 ? '/' + parts.slice(0, -1).join('/') : '');
+      rows.push(el('tr', { class: 'is-dir-row', ondblclick: () => loadDir(up) },
+        el('td'),
+        el('td', {}, el('div', { class: 'fname', onclick: () => loadDir(up) },
+          el('span', { class: 'fname__icon is-dir', text: '↩' }),
+          el('span', { class: 'fname__text', text: parts.length > 1 ? '.. (zurück)' : '.. (zurück zu DCIM)' })
         )),
         el('td'), el('td', { class: 'col-date' }), el('td')
       ));
@@ -744,7 +882,13 @@ $('#usbCheckAll')?.addEventListener('change', (e) => {
 
 /* ================================================================ Dateiübertragungen (Push & Pull) */
 function getActiveTarget() {
-  // Wenn nicht in einer spezifischen App, ist das Ziel immer Dino-Transfer
+  if (S.usb.mode === 'photos') {
+    return {
+      bundle: '__photos__',
+      name: 'Fotos & Bilder',
+      path: S.usb.path || 'DCIM',
+    };
+  }
   if (S.usb.mode === 'app' && S.usb.app) {
     return { bundle: S.usb.app.bundle, name: S.usb.app.name, path: S.usb.path };
   }
@@ -764,8 +908,9 @@ function getActiveTarget() {
 async function pushPaths(paths) {
   if (!paths || !paths.length) return;
   const target = getActiveTarget();
+  const devLabel = getDeviceLabel();
   if (!target) {
-    toast('Keine kompatible App auf dem iPad gefunden.', 'error');
+    toast(`Kein Ziel auf dem ${devLabel} gefunden.`, 'error');
     return;
   }
   // Falls im Root-Modus, zuerst zu Dino-Transfer wechseln
@@ -792,14 +937,15 @@ async function pullItems(paths, choose = false) {
 async function deleteItems(paths) {
   const target = getActiveTarget();
   if (!target || !paths.length) return;
+  const devLabel = getDeviceLabel();
   const names = paths.map((p) => p.split('/').pop());
   const isSingleDir = paths.length === 1 && S.usb.entries.find((e) => e.path === paths[0] && e.isDir);
 
   const ok = await dialog({
     title: isSingleDir ? `Ordner „${names[0]}“ löschen?` : `${paths.length === 1 ? `„${names[0]}“` : `${paths.length} Elemente`} löschen?`,
     text: isSingleDir
-      ? `Der gesamte Ordner samt Inhalt wird direkt vom iPad gelöscht.`
-      : `Wird direkt vom iPad gelöscht.`,
+      ? `Der gesamte Ordner samt Inhalt wird direkt vom ${devLabel} gelöscht.`
+      : `Wird direkt vom ${devLabel} gelöscht.`,
     okLabel: '🗑 Löschen',
     danger: true,
   });
@@ -845,11 +991,12 @@ $('#btnUsbAddFolder')?.addEventListener('click', async () => {
   }
 });
 
-// Neuer Ordner: Wird direkt in Dino-Transfer bzw. aktuellem Ordner angelegt (keine Nachfragen!)
+// Neuer Ordner: Wird direkt im aktuellen Ordner angelegt
 $('#btnUsbMkdir')?.addEventListener('click', async () => {
   const target = getActiveTarget();
+  const devLabel = getDeviceLabel();
   if (!target) {
-    toast('iPad ist nicht bereit.', 'warn');
+    toast(`${devLabel} ist nicht bereit.`, 'warn');
     return;
   }
 
@@ -859,8 +1006,8 @@ $('#btnUsbMkdir')?.addEventListener('click', async () => {
   }
 
   const name = await dialog({
-    title: 'Neuer Ordner auf dem iPad',
-    text: `Wird direkt in „${target.name}“ auf deinem iPad erstellt.`,
+    title: `Neuer Ordner auf dem ${devLabel}`,
+    text: `Wird direkt in „${target.name}“ auf deinem ${devLabel} erstellt.`,
     input: 'Neuer Ordner',
     okLabel: 'Ordner anlegen'
   });
@@ -893,7 +1040,7 @@ async function onToggleWireless(e) {
       renderDevice(S.usb.device);
     }
     toast(allow
-      ? '📡 Apple-Funk aktiviert – iPad bleibt auch ohne Kabel verbunden'
+      ? `📡 Apple-Funk aktiviert – ${getDeviceLabel()} bleibt auch ohne Kabel verbunden`
       : '🔌 Strikt nur USB-Kabel aktiv – Verbindung ohne Kabel getrennt', 'ok');
     await pollUsb();
   } catch (err) {
@@ -968,6 +1115,10 @@ const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Fi
 function dropTargetNode() {
   const rootLabel = getDeviceRootLabel();
   if (S.usb.state === 'ready') {
+    if (S.usb.mode === 'photos') {
+      const loc = [rootLabel, '📸 Fotos & Bilder (DCIM)', ...relPhotosParts()].join(' › ');
+      return [document.createTextNode('wird direkt kopiert nach '), el('b', { text: loc })];
+    }
     if (S.usb.mode === 'app' && S.usb.app) {
       return [document.createTextNode('wird per USB-Kabel kopiert nach '), el('b', { text: [rootLabel, S.usb.app.name, ...relAppParts()].join(' › ') })];
     }
@@ -975,7 +1126,7 @@ function dropTargetNode() {
     const loc = [rootLabel, 'Dino-Transfer', ...dinoSub].join(' › ');
     return [document.createTextNode('wird per USB-Kabel kopiert nach '), el('b', { text: loc })];
   }
-  return [document.createTextNode('Bitte zuerst das iPad per USB anschließen.')];
+  return [document.createTextNode('Bitte zuerst dein Apple-Gerät per USB anschließen.')];
 }
 
 window.addEventListener('dragenter', (e) => {
@@ -1008,7 +1159,7 @@ function handleDrop(items) {
   if (S.usb.state === 'ready') {
     pushPaths(paths);
   } else {
-    toast('Bitte zuerst das iPad per USB-Kabel anschließen.', 'warn');
+    toast('Bitte zuerst dein Apple-Gerät per USB-Kabel anschließen.', 'warn');
   }
 }
 
@@ -1110,8 +1261,21 @@ function bindStaticUi() {
 
   // Buttons auf dem Startbildschirm
   $('#btnManualSearch')?.addEventListener('click', async () => {
-    toast('🔍 Suche nach iPad / iPhone …', 'info');
-    await pollUsb();
+    const btn = $('#btnManualSearch');
+    if (btn && btn.disabled) return;
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="btn__icon">⏳</span> Suche läuft …';
+    }
+    toast('🔍 Suche nach Apple-Gerät …', 'info');
+    try {
+      await pollUsb();
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="btn__icon">↻</span> Jetzt nach Apple-Gerät suchen';
+      }
+    }
   });
 
   $('#btnLaunchApple')?.addEventListener('click', async () => {

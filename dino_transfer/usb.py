@@ -50,8 +50,11 @@ class UsbError(Exception):
         self.details = details
 
 
-def _normalize_remote(path: str) -> str:
-    path = (path or DOCS_ROOT).replace("\\", "/")
+def _normalize_remote(path: str, allow_root_paths: bool = False) -> str:
+    path = (path or ("" if allow_root_paths else DOCS_ROOT)).replace("\\", "/")
+    if allow_root_paths:
+        path = path.strip("/")
+        return path
     if not path.startswith("/"):
         path = posixpath.join(DOCS_ROOT, path)
     path = posixpath.normpath(path)
@@ -188,6 +191,17 @@ class UsbBridge:
         devices = await usbmux.list_devices()
         usb_devices = [d for d in devices if d.is_usb]
         net_devices = [d for d in devices if not d.is_usb]
+
+        # Wenn zuvor ein Gerät verbunden war und list_devices() kurzzeitig leer zurückkommt:
+        if not usb_devices and (not net_devices or not self.allow_wireless) and self._lockdown is not None and not self.service_paused:
+            await asyncio.sleep(0.35)
+            try:
+                devices = await usbmux.list_devices()
+                usb_devices = [d for d in devices if d.is_usb]
+                net_devices = [d for d in devices if not d.is_usb]
+            except Exception:
+                pass
+
         self._cable_plugged = len(usb_devices) > 0
         self._wifi_available = len(net_devices) > 0
 
@@ -204,7 +218,7 @@ class UsbBridge:
             raise UsbError(
                 "paused",
                 "Verbindung manuell getrennt ✅",
-                "Die Sitzung zum iPad ist beendet. Du kannst das USB-Kabel jetzt sicher abziehen – oder klicke unten auf „Jetzt wieder verbinden“, um die Verbindung erneut zu starten.",
+                "Die Sitzung zum Apple-Gerät ist beendet. Du kannst das USB-Kabel jetzt sicher abziehen – oder klicke unten auf „Jetzt wieder verbinden“, um die Verbindung erneut zu starten.",
             )
 
         if usb_devices:
@@ -300,20 +314,35 @@ class UsbBridge:
 
     @asynccontextmanager
     async def _house(self, bundle_id: str):
-        from pymobiledevice3.services.house_arrest import VEND_DOCUMENTS, HouseArrestService
+        if bundle_id == "__photos__":
+            from pymobiledevice3.services.afc import AfcService
 
-        ld = await self._get_lockdown()
-        svc = HouseArrestService(ld, documents_only=True)
-        await self._start(svc)
-        try:
-            await svc.send_command(bundle_id, VEND_DOCUMENTS)
-            await svc.__aenter__()
-            yield svc
-        finally:
+            ld = await self._get_lockdown()
+            svc = AfcService(ld)
+            await self._start(svc)
             try:
-                await svc.aclose()
-            except Exception:
-                pass
+                await svc.__aenter__()
+                yield svc
+            finally:
+                try:
+                    await svc.aclose()
+                except Exception:
+                    pass
+        else:
+            from pymobiledevice3.services.house_arrest import VEND_DOCUMENTS, HouseArrestService
+
+            ld = await self._get_lockdown()
+            svc = HouseArrestService(ld, documents_only=True)
+            await self._start(svc)
+            try:
+                await svc.send_command(bundle_id, VEND_DOCUMENTS)
+                await svc.__aenter__()
+                yield svc
+            finally:
+                try:
+                    await svc.aclose()
+                except Exception:
+                    pass
 
     # ------------------------------------------------------------------ Status
     def status(self) -> dict:
@@ -355,13 +384,14 @@ class UsbBridge:
 
         ld = await self._get_lockdown()
         info = dict(ld.short_info)
-        try:
-            name = await ld.get_value(key="DeviceName")
-        except Exception:
-            await self._drop_lockdown()
-            raise
+        name = info.get("DeviceName")
+        if not name:
+            try:
+                name = await ld.get_value(key="DeviceName")
+            except Exception:
+                name = None
 
-        dev_class = info.get("DeviceClass") or "iPad"
+        dev_class = info.get("DeviceClass") or "Apple-Gerät"
         device = {
             "name": name or info.get("DeviceName") or dev_class,
             "model": info.get("ProductType") or "",
@@ -463,7 +493,8 @@ class UsbBridge:
 
     # ------------------------------------------------------------------ Dateien
     def list_dir(self, bundle_id: str, path: str) -> dict:
-        return self._call(self._list_dir(bundle_id, _normalize_remote(path)), timeout=45)
+        is_photos = bundle_id == "__photos__"
+        return self._call(self._list_dir(bundle_id, _normalize_remote(path, allow_root_paths=is_photos)), timeout=45)
 
     async def _list_dir(self, bundle_id: str, path: str) -> dict:
         entries = []
@@ -488,7 +519,10 @@ class UsbBridge:
         return {"path": path, "entries": entries}
 
     def mkdir(self, bundle_id: str, parent: str, name: str) -> str:
-        path = _normalize_remote(posixpath.join(_normalize_remote(parent), safe_name(name, "Neuer Ordner")))
+        is_photos = bundle_id == "__photos__"
+        norm_parent = _normalize_remote(parent, allow_root_paths=is_photos)
+        sub = posixpath.join(norm_parent, safe_name(name, "Neuer Ordner"))
+        path = _normalize_remote(sub, allow_root_paths=is_photos)
         return self._call(self._mkdir(bundle_id, path))
 
     async def _mkdir(self, bundle_id: str, path: str) -> str:
@@ -497,9 +531,12 @@ class UsbBridge:
         return path
 
     def delete(self, bundle_id: str, paths: list[str]) -> int:
-        norm = [_normalize_remote(p) for p in paths]
-        if DOCS_ROOT in norm:
+        is_photos = bundle_id == "__photos__"
+        norm = [_normalize_remote(p, allow_root_paths=is_photos) for p in paths]
+        if not is_photos and DOCS_ROOT in norm:
             raise UsbError("bad_path", "Der Hauptordner der App kann nicht gelöscht werden.")
+        if is_photos and any(p in ("", "/", "DCIM", "DCIM/") for p in norm):
+            raise UsbError("bad_path", "Der Hauptordner der Mediengalerie kann nicht gelöscht werden.")
         return self._call(self._delete(bundle_id, norm), timeout=300)
 
     async def _delete(self, bundle_id: str, paths: list[str]) -> int:
@@ -509,8 +546,9 @@ class UsbBridge:
         return len(paths)
 
     def rename(self, bundle_id: str, path: str, new_name: str) -> str:
-        src = _normalize_remote(path)
-        dst = _normalize_remote(posixpath.join(posixpath.dirname(src), safe_name(new_name)))
+        is_photos = bundle_id == "__photos__"
+        src = _normalize_remote(path, allow_root_paths=is_photos)
+        dst = _normalize_remote(posixpath.join(posixpath.dirname(src), safe_name(new_name)), allow_root_paths=is_photos)
         return self._call(self._rename(bundle_id, src, dst))
 
     async def _rename(self, bundle_id: str, src: str, dst: str) -> str:
@@ -522,7 +560,8 @@ class UsbBridge:
 
     # ------------------------------------------------------------------ Übertragungen
     def start_push(self, bundle_id: str, app_name: str, local_paths: list[str], remote_dir: str) -> str:
-        remote_dir = _normalize_remote(remote_dir)
+        is_photos = bundle_id == "__photos__"
+        remote_dir = _normalize_remote(remote_dir, allow_root_paths=is_photos)
         count = len(local_paths)
         title = f"{count} Element{'e' if count != 1 else ''} → {app_name}"
         job = Job("push", title, self._emit)
@@ -531,7 +570,8 @@ class UsbBridge:
         return job.id
 
     def start_pull(self, bundle_id: str, app_name: str, remote_paths: list[str], local_dir: str) -> str:
-        norm = [_normalize_remote(p) for p in remote_paths]
+        is_photos = bundle_id == "__photos__"
+        norm = [_normalize_remote(p, allow_root_paths=is_photos) for p in remote_paths]
         count = len(norm)
         title = f"{count} Element{'e' if count != 1 else ''} von {app_name} → PC"
         job = Job("pull", title, self._emit)
@@ -545,9 +585,9 @@ class UsbBridge:
             job.cancelled = True
 
     async def _run_job(self, job: Job, coro) -> None:
-        job.report(force=True)
-        self._active_transfer = True
         try:
+            job.report(force=True)
+            self._active_transfer = True
             extra = await coro or {}
             job.finish("cancelled" if job.cancelled else "done", **extra)
         except Exception as e:
