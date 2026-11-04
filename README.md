@@ -1,64 +1,44 @@
-# Dino-Apple-Transfer 🦕📱
+<p align="center">
+  <img src="ui/dino_hero.png" width="220" alt="Dino-Apple-Transfer Maskottchen">
+</p>
 
-> **100% lokale, direkte USB-Kabel-Dateiübertragung für iPhone & iPad (iOS/iPadOS)**  
-> Mit dem niedlichen Ankylosaurus-Maskottchen, dunklem Tech-Theme (`#121212`) und leuchtend gelben Akzenten (`#eab308`).
+<h1 align="center">Dino-Apple-Transfer 🦕</h1>
 
----
-
-## ✨ Features
-
-- **🔌 Direkte USB-Kabelverbindung:** Nutzt Apples natives `house_arrest`- und `AFC`-Protokoll (über `pymobiledevice3`). Keine Cloud, kein WLAN, kein Internet nötig.
-- **🦕 Dino-Transfer Hauptordner:** Alle Dateien und neu angelegten Ordner landen direkt im dedizierten `Dino-Transfer`-Verzeichnis auf dem iPad/iPhone.
-- **📁 Volle Ordnerverwaltung:** 
-  - Beliebig viele Unterordner direkt auf dem iPad erstellen (`＋📁 Neuer Ordner auf iPad`).
-  - Ordner samt Inhalt mit einem Klick löschen (`🗑`).
-  - Dateien und Ordner hin- und herkopieren (PC ➔ iPad und iPad ➔ PC).
-- **📂 Schneller iPad-Zugriff:** Auf dem iPad findest du deine Dateien direkt in der **Dateien-App** unter:  
-  `Auf meinem iPad › Chrome › Dino-Transfer`
-- **🖥️ Drag & Drop:** Ziehe Dateien oder Ordner direkt aus dem Windows-Explorer in das Anwendungsfenster.
-- **🚀 Apple-Geräte-Integration:** Erkennt automatisch, ob die Windows Store App *„Apple Geräte“* installiert ist, und bietet direkte Start- bzw. Download-Möglichkeiten.
-- **💡 iPad-App-Tipps:** Empfehlungen für kostenlose Player wie **VLC for Mobile** (spielt MP3, FLAC, MKV, MP4 ohne iTunes ab) und **Documents von Readdle**.
+<p align="center">
+  <b>Direkte, 100 % lokale Dateiübertragung zwischen Windows-PC und iPad / iPhone</b><br>
+  Ohne Cloud · Ohne Größenlimit · Per 🟢 USB-Kabel oder 🔵 Apple-Funk
+</p>
 
 ---
 
-## 🚀 Installation & Schnellstart
+## 🎯 Wofür ist die App?
 
-### 1. Voraussetzungen (Windows 10 / 11)
-- **Python 3.10+** (getestet mit Python 3.12)
-- **Apple Geräte App** aus dem Microsoft Store (installiert den benötigten Apple-USB-Treiber):  
-  [Apple Geräte im Microsoft Store](ms-windows-store://pdp/?productid=9NP83LWLPZ9K)
-
-### 2. Schnelle Einrichtung
-```powershell
-# Virtuelle Umgebung erstellen
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-# Abhängigkeiten installieren
-pip install -r requirements.txt
-
-# Starten
-python run.py
-```
-Oder einfach doppelt auf **`start.bat`** klicken.
-
-### 3. Als eigenständige `.exe` bauen (PyInstaller)
-```powershell
-.\.venv\Scripts\pyinstaller.exe --name "Dino-Apple-Transfer" --noconfirm --onedir --windowed --icon "ui/app.ico" --add-data "ui;ui" --collect-all pymobiledevice3 --collect-all webview run.py
-```
+**Dino-Apple-Transfer** ermöglicht es, Dateien und ganze Ordner unkompliziert zwischen einem Windows-PC und einem iPad oder iPhone auszutauschen. Alle übertragenen Inhalte landen direkt in einem festen, leicht auffindbaren Ordner auf dem Gerät.
 
 ---
 
-## 🔌 Wichtige Hinweise zum Datenkabel
+## ✨ Was kann die App?
 
-> ⚠️ **Achtung vor reinen Ladekabeln:**  
-> Viele günstige USB-Kabel übertragen nur Strom (+5V / GND), aber keine Daten. Windows erkennt das iPad dann überhaupt nicht. Verwende immer ein vollwertiges **USB-Datenkabel** (z. B. das Original-Apple-Kabel).
-
-1. Kabel anstecken.
-2. iPhone/iPad **entsperren**.
-3. Auf dem Bildschirm bei **„Diesem Computer vertrauen?“** auf **Vertrauen** tippen und den Geräte-Code eingeben.
+- **🟢 USB-Kabel & 🔵 Apple-Funk:**
+  - **Mit USB-Kabel:** Maximale Übertragungsgeschwindigkeit (auch für das allererste Koppeln mit dem PC).
+  - **Ohne Kabel (Apple-Funk):** Sobald das iPad einmal per Kabel gekoppelt wurde, kann das Kabel weggelassen oder abgezogen werden – die Übertragung läuft dann bequem kabellos weiter.
+  - **Jederzeit trennbar:** Mit einem Klick auf *„⏹ Verbindung trennen“* lässt sich die Sitzung sofort beenden.
+- **📁 Dateien & ganze Ordner übertragen:**
+  - Einzelne Dateien oder komplette Ordner samt Inhalt per Button auswählen oder einfach per **Drag & Drop** in das Fenster ziehen.
+- **🦕 Fester Zielordner auf dem iPad (`Dino-Transfer`):**
+  - Auf dem iPad sofort zu finden über die **Dateien-App**:  
+    `Auf meinem iPad ➔ Chrome ➔ Dino-Transfer`
+- **🗂️ Ordner verwalten & Speichern unter:**
+  - Direkt auf dem iPad neue Ordner erstellen (`＋📁 Neuer Ordner auf iPad`), umbenennen oder löschen.
+  - Dateien und Ordner vom iPad über **„⬇ Speichern unter …“** an einen frei wählbaren Speicherort auf dem PC herunterladen.
 
 ---
 
-## 📜 Lizenz
-MIT License · Erstellt für die unkomplizierte Dateiübertragung zwischen Windows und Apple-Geräten 🦕
+## 🚀 Schnellstart (Windows 10 / 11)
+
+1. **Treiber (einmalig):**  
+   Die kostenlose App **[Apple Geräte](https://apps.microsoft.com/detail/9np83lwlpz9k)** aus dem Microsoft Store installieren. Sie dient im Hintergrund als Windows-Treiber und muss selbst **nicht** geöffnet werden.
+2. **App starten:**  
+   Unter **[Releases](../../releases)** das aktuelle `Dino-Apple-Transfer-v2.0.0-Windows.zip` herunterladen, entpacken und **`Dino-Apple-Transfer.exe`** starten.
+3. **Erstes Verbinden:**  
+   iPad per echtem USB-Datenkabel (kein reines Ladekabel) anschließen, Bildschirm entsperren und einmalig *„Diesem Computer vertrauen“* bestätigen.
