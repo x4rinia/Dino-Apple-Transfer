@@ -43,6 +43,19 @@
           </button>
         </div>
 
+        <!-- Gefundene Apple-Geräte in Reichweite (Auswahl bei mehreren iPhones/iPads) -->
+        <div id="devicePickerStart" class="device-picker-box" hidden>
+          <div class="device-picker-box__title">📱 Gefundene Apple-Geräte in Reichweite:</div>
+          <div class="muted small" style="margin-top:2px">Klicke auf das gewünschte Gerät, um dich direkt damit zu verbinden:</div>
+          <div id="devicePickerList" class="device-picker-list"></div>
+        </div>
+
+        <div class="state__sub-actions" style="margin-top:8px">
+          <button class="btn btn--ghost btn--small" id="btnToggleWirelessStart" title="Apple-Funk trennen und ausschalten">
+            📡 Apple-Funk ausschalten (nur USB)
+          </button>
+        </div>
+
         <!-- Einfache Treiber- & Verbindungs-Info -->
         <div class="cable-alert" style="max-width:560px;text-align:left">
           <div class="cable-alert__icon">💡</div>
@@ -69,8 +82,13 @@
           <div class="card device">
             <div class="device__head">
               <div class="device__icon" id="devIcon">📱</div>
-              <div>
-                <div class="device__name" id="devName">Apple-Gerät</div>
+              <div style="min-width:0;flex:1">
+                <div class="device__name-row" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  <div class="device__name" id="devName">Apple-Gerät</div>
+                  <button class="btn btn--small btn--switch" id="btnSwitchDevice" hidden title="Zu einem anderen iPhone oder iPad wechseln">
+                    🔄 Wechseln (<span id="devCountBadge">1</span>)
+                  </button>
+                </div>
                 <div class="device__meta muted" id="devMeta"></div>
               </div>
             </div>
@@ -83,9 +101,14 @@
               <p class="conn-box__hint" id="connModeHint">
                 Mit USB-Kabel verbunden.
               </p>
-              <button class="btn btn--small conn-box__stop-btn" id="btnStopService" title="Trennt die Verbindung und wechselt zum Startbildschirm">
-                ⏹ Verbindung trennen
-              </button>
+              <div class="conn-box__actions" style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn btn--small conn-box__stop-btn" id="btnStopService" title="Trennt die Verbindung und wechselt zum Startbildschirm">
+                  ⏹ Verbindung trennen
+                </button>
+                <button class="btn btn--small btn--ghost" id="btnDisconnectWireless" hidden title="Trennt die Funk-Verbindung sofort und schaltet Apple-Funk aus (nur noch USB erlaubt)">
+                  📡 Funk trennen
+                </button>
+              </div>
             </div>
           </div>
 
@@ -233,6 +256,20 @@
         <button class="btn btn--primary" value="ok" id="dlgOk">OK</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Dialog: Anderes Apple-Gerät auswählen -->
+  <dialog class="dialog" id="dlgDeviceSwitch" style="max-width:440px;padding:20px;border-radius:14px;background:var(--surface-2);border:1px solid rgba(234,179,8,.4);color:var(--text)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3 style="margin:0;font-size:16px;color:var(--accent)">🔄 Apple-Gerät wechseln</h3>
+      <button class="icon-btn" id="btnCloseDeviceSwitch" title="Schließen">✕</button>
+    </div>
+    <p class="muted small" style="margin:0 0 12px">Wähle das iPhone oder iPad aus, mit dem du arbeiten möchtest:</p>
+    <div id="dlgDeviceSwitchList" class="device-picker-list" style="margin-bottom:16px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--line);padding-top:12px">
+      <button class="btn btn--ghost btn--small" id="btnDisconnectWirelessModal">📡 Apple-Funk trennen</button>
+      <button class="btn btn--small" id="btnCancelDeviceSwitch">Abbrechen</button>
+    </div>
   </dialog>
 
   <div class="toasts" id="toasts"></div>

@@ -229,8 +229,27 @@ async function applyUsbStatus(st) {
   }
 
   const allowWifi = st.allowWireless !== false;
+  S.usb.allowWireless = allowWifi;
+  S.usb.availableDevices = st.availableDevices || [];
+  const devCount = S.usb.availableDevices.length;
+
   if ($('#chkAllowWireless')) $('#chkAllowWireless').checked = allowWifi;
   if ($('#chkAllowWirelessStart')) $('#chkAllowWirelessStart').checked = allowWifi;
+
+  // Gerätewechsel-Button im Header/Sidebar aktualisieren
+  const btnSwitch = $('#btnSwitchDevice');
+  if (btnSwitch) {
+    btnSwitch.hidden = devCount <= 1;
+    if ($('#devCountBadge')) $('#devCountBadge').textContent = devCount;
+  }
+
+  // Funk-Button auf dem Startbildschirm
+  const btnToggleWireStart = $('#btnToggleWirelessStart');
+  if (btnToggleWireStart) {
+    btnToggleWireStart.textContent = allowWifi
+      ? '📡 Apple-Funk ausschalten (nur USB)'
+      : '📡 Apple-Funk einschalten (kabellos verbinden)';
+  }
 
   // Treiber-Status ("Apple Geräte") aktualisieren
   const isInstalled = (S.usb.appleStatus && S.usb.appleStatus.installed) || st.driverRunning;
@@ -341,6 +360,34 @@ async function applyUsbStatus(st) {
   setPill('#pillUsb', pillState[0], pillState[1]);
   $('#usbStateTitle').textContent = title;
   $('#usbStateText').textContent = text;
+
+  // Liste aller gefundenen Apple-Geräte auf dem Startbildschirm darstellen
+  const pickerBox = $('#devicePickerStart');
+  const pickerList = $('#devicePickerList');
+  if (pickerBox && pickerList) {
+    if (devCount > 0) {
+      pickerBox.hidden = false;
+      pickerList.replaceChildren(...S.usb.availableDevices.map((dev) => {
+        const isCur = dev.active;
+        const icon = dev.isIPhone ? '📱' : '📲';
+        const modeLabel = dev.connMode === 'usb' ? '🟢 USB-Kabel' : '🔵 Apple-Funk';
+        return el('div', { class: `device-picker-item ${isCur ? 'is-active' : ''}` },
+          el('span', { class: 'device-picker-item__icon', text: icon }),
+          el('div', { class: 'device-picker-item__info' },
+            el('div', { class: 'device-picker-item__name', text: dev.name }),
+            el('div', { class: 'device-picker-item__sub', text: `${modeLabel} · ${dev.class || 'Apple-Gerät'}` })
+          ),
+          el('button', {
+            class: 'btn btn--small btn--primary',
+            text: isCur ? 'Aktiv' : 'Verbinden',
+            onclick: () => selectDevice(dev.serial)
+          })
+        );
+      }));
+    } else {
+      pickerBox.hidden = true;
+    }
+  }
 }
 
 function renderStoreActions() {
@@ -412,6 +459,11 @@ function renderDevice(d) {
       badge.textContent = '🟢 USB-Kabel aktiv (Volles Tempo)';
       hint.innerHTML = `<b>Mit USB-Kabel verbunden:</b> Maximale Geschwindigkeit! Ziehst du das Kabel ab, bleibt dein ${devLabel} nahtlos per <b>🔵 Apple-Funk</b> verbunden – oder klicke unten auf <b>„Verbindung trennen“</b>.`;
     }
+  }
+
+  const btnDiscWire = $('#btnDisconnectWireless');
+  if (btnDiscWire) {
+    btnDiscWire.hidden = !(d.connMode === 'wifi' || allowWifi);
   }
 }
 
@@ -1027,6 +1079,83 @@ $('#btnUsbDelete')?.addEventListener('click', () => deleteItems([...S.usb.select
 $('#btnUsbRefresh')?.addEventListener('click', () => {
   if (S.usb.mode === 'root') renderBrowser();
   else loadDir(S.usb.path);
+});
+
+async function selectDevice(serial) {
+  toast('🔄 Wechsle zu Apple-Gerät …', 'info');
+  try {
+    const st = await api('usb_select_device', serial);
+    await applyUsbStatus(st);
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function disconnectWireless() {
+  toast('📡 Apple-Funk wird getrennt …', 'info');
+  try {
+    const st = await api('disconnect_wireless');
+    await applyUsbStatus(st);
+    toast('🔌 Apple-Funk getrennt – Nur noch USB-Kabel aktiv', 'ok');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+function openDeviceSwitchModal() {
+  const dlg = $('#dlgDeviceSwitch');
+  const list = $('#dlgDeviceSwitchList');
+  if (!dlg || !list) return;
+
+  const devs = S.usb.availableDevices || [];
+  list.replaceChildren(...devs.map((dev) => {
+    const isCur = dev.active || (S.usb.device && S.usb.device.serial === dev.serial);
+    const icon = dev.isIPhone ? '📱' : '📲';
+    const modeLabel = dev.connMode === 'usb' ? '🟢 USB-Kabel' : '🔵 Apple-Funk';
+    return el('div', { class: `device-picker-item ${isCur ? 'is-active' : ''}` },
+      el('span', { class: 'device-picker-item__icon', text: icon }),
+      el('div', { class: 'device-picker-item__info' },
+        el('div', { class: 'device-picker-item__name', text: dev.name }),
+        el('div', { class: 'device-picker-item__sub', text: `${modeLabel} · ${dev.class || 'Apple-Gerät'}` })
+      ),
+      isCur
+        ? el('span', { class: 'badge is-on', text: 'Verbunden' })
+        : el('button', {
+            class: 'btn btn--small btn--primary',
+            text: 'Wechseln',
+            onclick: () => {
+              dlg.close();
+              selectDevice(dev.serial);
+            }
+          })
+    );
+  }));
+
+  dlg.showModal();
+}
+
+$('#btnSwitchDevice')?.addEventListener('click', openDeviceSwitchModal);
+$('#btnCloseDeviceSwitch')?.addEventListener('click', () => $('#dlgDeviceSwitch')?.close());
+$('#btnCancelDeviceSwitch')?.addEventListener('click', () => $('#dlgDeviceSwitch')?.close());
+$('#btnDisconnectWireless')?.addEventListener('click', disconnectWireless);
+$('#btnDisconnectWirelessModal')?.addEventListener('click', () => {
+  $('#dlgDeviceSwitch')?.close();
+  disconnectWireless();
+});
+
+$('#btnToggleWirelessStart')?.addEventListener('click', async () => {
+  if (S.usb.allowWireless !== false) {
+    await disconnectWireless();
+  } else {
+    toast('📡 Apple-Funk wird eingeschaltet …', 'info');
+    try {
+      await api('set_wireless_mode', true);
+      await pollUsb();
+      toast('📡 Apple-Funk eingeschaltet', 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
 });
 
 async function onToggleWireless(e) {

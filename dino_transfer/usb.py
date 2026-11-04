@@ -114,6 +114,7 @@ class UsbBridge:
         self._thread.start()
         self._lockdown = None
         self._serial: Optional[str] = None
+        self._selected_serial: Optional[str] = None
         self._conn_mode: str = "usb"
         self._cable_plugged: bool = False
         self._wifi_available: bool = False
@@ -121,6 +122,7 @@ class UsbBridge:
         self.allow_wireless: bool = allow_wireless
         self.service_paused: bool = False
         self._icons: dict[str, Optional[str]] = {}
+        self._device_cache: dict[str, dict] = {}
         self.jobs: dict[str, Job] = {}
         self._active_transfer = False
 
@@ -213,31 +215,50 @@ class UsbBridge:
                 raise UsbError(
                     "paused",
                     "Verbindung getrennt & USB-Kabel ist abgezogen ✅",
-                    "Das Kabel wurde sicher entfernt. Stecke das USB-Kabel wieder an oder klicke auf „Jetzt wieder verbinden“, sobald du weiterarbeiten möchtest.",
+                    "Das Kabel wurde sicher entfernt. Stecke das USB-Kabel wieder an, wähle ein Gerät aus oder klicke auf „Jetzt wieder verbinden“.",
                 )
             raise UsbError(
                 "paused",
                 "Verbindung manuell getrennt ✅",
-                "Die Sitzung zum Apple-Gerät ist beendet. Du kannst das USB-Kabel jetzt sicher abziehen – oder klicke unten auf „Jetzt wieder verbinden“, um die Verbindung erneut zu starten.",
+                "Die Sitzung zum Apple-Gerät ist beendet. Du kannst das USB-Kabel jetzt sicher abziehen, ein anderes Gerät wählen oder auf „Jetzt wieder verbinden“ klicken.",
             )
 
-        if usb_devices:
-            target = usb_devices[0]
-            desired_conn = "USB"
-            conn_mode = "usb"
-        elif net_devices and self.allow_wireless:
-            target = net_devices[0]
-            desired_conn = "Network"
-            conn_mode = "wifi"
-        else:
-            await self._drop_lockdown()
-            if net_devices and not self.allow_wireless:
-                raise UsbError(
-                    "no_device",
-                    "USB-Kabel abgezogen (Apple-Funk ist ausgeschaltet).",
-                    "Stecke das USB-Kabel wieder an oder klicke unten auf „Jetzt wieder verbinden“, um Apple-Funk einzuschalten.",
-                )
-            raise UsbError("no_device", "Kein Apple-Gerät per USB-Kabel oder Apple-Funk verbunden.")
+        target = None
+        desired_conn = "USB"
+        conn_mode = "usb"
+
+        # 1. Bevorzugt das vom Nutzer ausgewählte Gerät berücksichtigen
+        if self._selected_serial:
+            matched_usb = next((d for d in usb_devices if d.serial == self._selected_serial), None)
+            matched_net = next((d for d in net_devices if d.serial == self._selected_serial), None) if self.allow_wireless else None
+            if matched_usb:
+                target = matched_usb
+                desired_conn = "USB"
+                conn_mode = "usb"
+            elif matched_net:
+                target = matched_net
+                desired_conn = "Network"
+                conn_mode = "wifi"
+
+        # 2. Standardauswahl: USB zuerst, sonst Funk (falls erlaubt)
+        if target is None:
+            if usb_devices:
+                target = usb_devices[0]
+                desired_conn = "USB"
+                conn_mode = "usb"
+            elif net_devices and self.allow_wireless:
+                target = net_devices[0]
+                desired_conn = "Network"
+                conn_mode = "wifi"
+            else:
+                await self._drop_lockdown()
+                if net_devices and not self.allow_wireless:
+                    raise UsbError(
+                        "no_device",
+                        "Apple-Funk ist ausgeschaltet (Nur USB-Kabel aktiv).",
+                        "Stecke ein USB-Kabel an, wähle ein Gerät aus oder schalte Apple-Funk ein, um kabellos zu verbinden.",
+                    )
+                raise UsbError("no_device", "Kein Apple-Gerät per USB-Kabel oder Apple-Funk verbunden.")
 
         serial = target.serial
 
@@ -248,9 +269,92 @@ class UsbBridge:
         async with self.ld_lock:
             self._lockdown = await create_using_usbmux(serial=serial, autopair=True, connection_type=desired_conn)
         self._serial = serial
+        self._selected_serial = serial
         self._conn_mode = conn_mode
-        log.info("Verbunden mit %s (%s)", self._lockdown.short_info.get("DeviceName"), conn_mode.upper())
+        dev_name = self._lockdown.short_info.get("DeviceName") or "Apple-Gerät"
+        dev_class = self._lockdown.short_info.get("DeviceClass") or "Gerät"
+        dev_model = self._lockdown.short_info.get("ProductType") or ""
+        self._device_cache[serial] = {"name": dev_name, "class": dev_class, "model": dev_model}
+        log.info("Verbunden mit %s (%s)", dev_name, conn_mode.upper())
         return self._lockdown
+
+    async def _resolve_device_info(self, serial: str, conn_type: str) -> dict:
+        if serial in self._device_cache:
+            return self._device_cache[serial]
+        from pymobiledevice3.lockdown import create_using_usbmux
+        try:
+            ld = await create_using_usbmux(serial=serial, connection_type=conn_type)
+            info = {
+                "name": ld.short_info.get("DeviceName") or "Apple-Gerät",
+                "model": ld.short_info.get("ProductType") or "",
+                "class": ld.short_info.get("DeviceClass") or "Gerät",
+            }
+            try:
+                await ld.close()
+            except Exception:
+                pass
+            self._device_cache[serial] = info
+            return info
+        except Exception:
+            return {"name": "Apple-Gerät", "model": "", "class": "Gerät"}
+
+    async def _collect_available_devices(self) -> list[dict]:
+        from pymobiledevice3 import usbmux
+        try:
+            devices = await usbmux.list_devices()
+        except Exception:
+            return []
+
+        result = []
+        seen = set()
+        for d in sorted(devices, key=lambda x: not x.is_usb):
+            if d.serial in seen:
+                continue
+            seen.add(d.serial)
+            conn_type = "USB" if d.is_usb else "Network"
+            info = self._device_cache.get(d.serial)
+            if not info and (d.is_usb or self.allow_wireless):
+                info = await self._resolve_device_info(d.serial, conn_type)
+            if not info:
+                info = {"name": "Apple-Gerät", "model": "", "class": "Gerät"}
+            dev_class = info.get("class", "Gerät")
+            is_active = (d.serial == self._serial and not self.service_paused and self._lockdown is not None)
+            result.append({
+                "serial": d.serial,
+                "isUsb": d.is_usb,
+                "connMode": "usb" if d.is_usb else "wifi",
+                "name": info.get("name") or "Apple-Gerät",
+                "model": info.get("model") or "",
+                "class": dev_class,
+                "isIPhone": "iphone" in dev_class.lower(),
+                "active": is_active,
+            })
+        return result
+
+    def get_available_devices(self) -> list[dict]:
+        return self._call(self._collect_available_devices(), timeout=10)
+
+    def select_device(self, serial: str) -> dict:
+        log.info("Gerätewechsel zu: %s", serial)
+        self._selected_serial = serial
+        self.allow_wireless = True
+        self.service_paused = False
+        try:
+            self._call(self._drop_lockdown(), timeout=5)
+        except Exception:
+            pass
+        return self.status()
+
+    def disconnect_wireless(self) -> dict:
+        log.info("Apple-Funk wird getrennt & ausgeschaltet")
+        self.allow_wireless = False
+        self.service_paused = False
+        if self._conn_mode == "wifi":
+            try:
+                self._call(self._drop_lockdown(), timeout=5)
+            except Exception:
+                pass
+        return self.status()
 
     def set_allow_wireless(self, allow: bool) -> dict:
         self.allow_wireless = bool(allow)
@@ -353,8 +457,15 @@ class UsbBridge:
             res = {"state": e.code, "message": e.message, "details": e.details}
         except Exception as e:
             res = {"state": "error", "message": str(e)}
+
+        try:
+            res["availableDevices"] = self._call(self._collect_available_devices(), timeout=5)
+        except Exception:
+            res["availableDevices"] = []
+
         res["allowWireless"] = self.allow_wireless
         res["servicePaused"] = self.service_paused
+        res["selectedSerial"] = self._selected_serial
         res["cablePlugged"] = self._cable_plugged
         res["wifiAvailable"] = self._wifi_available
         res["driverRunning"] = driver_running
@@ -363,6 +474,7 @@ class UsbBridge:
             res["device"]["cablePlugged"] = self._cable_plugged
             res["device"]["allowWireless"] = self.allow_wireless
             res["device"]["connMode"] = self._conn_mode
+            res["device"]["selectedSerial"] = self._selected_serial
         return res
 
     async def _status(self) -> dict:

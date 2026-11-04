@@ -513,6 +513,79 @@ body.is-dragging .drop-overlay { display: grid; }
 .toast.out { opacity: 0; transform: translateY(8px); transition: .25s; }
 @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } }
 
+/* ---------- Device Picker & Switch ---------- */
+.device-picker-box {
+  margin-top: 14px;
+  width: 100%;
+  max-width: 560px;
+  background: var(--surface-2);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: 12px;
+  padding: 12px 14px;
+  text-align: left;
+}
+.device-picker-box__title {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--accent);
+}
+.device-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.device-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition: all .15s;
+}
+.device-picker-item:hover {
+  border-color: var(--accent);
+}
+.device-picker-item.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.device-picker-item__icon {
+  font-size: 22px;
+  flex: none;
+}
+.device-picker-item__info {
+  min-width: 0;
+  flex: 1;
+}
+.device-picker-item__name {
+  font-weight: 700;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.device-picker-item__sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.btn--switch {
+  font-size: 11.5px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(234, 179, 8, 0.12);
+  border-color: rgba(234, 179, 8, 0.4);
+  color: var(--accent);
+  cursor: pointer;
+}
+.btn--switch:hover {
+  background: var(--accent);
+  color: var(--ink);
+}
+
 @media (max-width: 1050px) {
   .usb-layout { grid-template-columns: 250px 1fr; }
   .col-date { display: none; }

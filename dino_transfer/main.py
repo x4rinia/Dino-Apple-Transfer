@@ -243,6 +243,19 @@ class Api:
         return self._usb.set_allow_wireless(bool(allow))
 
     @api_method
+    def disconnect_wireless(self):
+        self._settings.set("allow_wireless", False)
+        return self._usb.disconnect_wireless()
+
+    @api_method
+    def usb_devices(self):
+        return self._usb.get_available_devices()
+
+    @api_method
+    def usb_select_device(self, serial: str):
+        return self._usb.select_device(serial)
+
+    @api_method
     def stop_connection_service(self):
         return self._usb.stop_connection_service()
 
